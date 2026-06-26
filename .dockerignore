@@ -1,0 +1,8 @@
+.env
+.git
+__pycache__
+*.pyc
+output/
+.DS_Store
+
+original.docx

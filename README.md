@@ -1,0 +1,31 @@
+---
+title: Generator Laporan Perjalanan Dinas
+emoji: 📄
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
+
+# Generator Laporan Perjalanan Dinas
+
+Upload PDF Surat Tugas → AI parse → Konfirmasi → Download `.docx`.
+
+## Cara Pakai
+
+1. Upload PDF Surat Tugas (format TTE BSrE)
+2. AI otomatis ekstrak data dan generate narasi laporan
+3. Koreksi jika ada yang salah
+4. Klik **Generate & Download**
+
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `GROQ_API_KEY` | ✅ | API key dari [Groq](https://console.groq.com) |
+
+## Tech Stack
+
+- Python + Flask
+- Groq API (LLaMA 3.3 70B)
+- pdfplumber + python-docx

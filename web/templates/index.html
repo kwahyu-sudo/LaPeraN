@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Generator Laporan Perjalanan Dinas</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f5f7fa; color: #1a1a2e; min-height: 100vh; display: flex; justify-content: center; padding: 2rem 1rem; }
+  .container { max-width: 860px; width: 100%; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: .25rem; color: #16213e; }
+  .subtitle { color: #555; font-size: .9rem; margin-bottom: 1.5rem; }
+  .card { background: #fff; border-radius: 12px; padding: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,.08); margin-bottom: 1rem; }
+  .card-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; padding-bottom: .5rem; border-bottom: 2px solid #eef; }
+  .error { background: #fff0f0; color: #c00; padding: .75rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: .9rem; }
+  .drop-zone { border: 2px dashed #ccc; border-radius: 12px; padding: 3rem 2rem; text-align: center; cursor: pointer; transition: .2s; }
+  .drop-zone:hover { border-color: #4a6cf7; background: #f8f9ff; }
+  .drop-zone.dragover { border-color: #4a6cf7; background: #eef1ff; }
+  .drop-zone input { display: none; }
+  .drop-zone p { margin-top: .75rem; color: #888; font-size: .9rem; }
+  .btn { display: inline-block; padding: .6rem 1.5rem; border: none; border-radius: 8px; font-size: .95rem; font-weight: 500; cursor: pointer; text-decoration: none; transition: .15s; }
+  .btn-primary { background: #4a6cf7; color: #fff; }
+  .btn-primary:hover { background: #3b5de7; }
+  .btn-primary:disabled { opacity: .5; pointer-events: none; }
+  .btn-secondary { background: #eef; color: #333; }
+  .btn-secondary:hover { background: #dde; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem 1rem; }
+  .form-full { grid-column: 1 / -1; }
+  label { display: block; font-size: .8rem; font-weight: 500; color: #555; margin-bottom: .25rem; }
+  input, textarea { width: 100%; padding: .5rem .75rem; border: 1px solid #ddd; border-radius: 6px; font-size: .9rem; font-family: inherit; transition: .15s; }
+  input:focus, textarea:focus { outline: none; border-color: #4a6cf7; box-shadow: 0 0 0 3px rgba(74,108,247,.15); }
+  textarea { resize: vertical; min-height: 3.5rem; }
+  .pelaksana-row { display: grid; grid-template-columns: 1fr 2fr; gap: .5rem; align-items: end; }
+  .actions { display: flex; gap: .75rem; justify-content: flex-end; margin-top: 1.5rem; flex-wrap: wrap; }
+  .spinner { display: inline-block; width: 1rem; height: 1rem; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; margin-right: .4rem; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>📄 Generator Laporan Perjalanan Dinas</h1>
+  <p class="subtitle">Upload PDF Surat Tugas → AI parse → Konfirmasi → Download .docx</p>
+
+  {% if error %}
+  <div class="error">{{ error }}</div>
+  {% endif %}
+
+  {% if step == "upload" %}
+  <div class="card">
+    <div class="card-title">Upload Surat Tugas (PDF)</div>
+    <form action="/parse" method="post" enctype="multipart/form-data" id="upload-form">
+      <div class="drop-zone" id="drop-zone">
+        <div style="font-size:2.5rem;color:#4a6cf7;">📎</div>
+        <p style="font-weight:500;margin-top:.5rem;">Klik atau drop PDF di sini</p>
+        <p>Format: PDF TTE BSrE (bukan scan)</p>
+        <input type="file" name="pdf" accept=".pdf" id="file-input">
+      </div>
+      <div class="actions">
+        <button type="submit" class="btn btn-primary" id="parse-btn">Parse dengan AI</button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  {% if step == "confirm" %}
+  <form action="/render" method="post" id="confirm-form">
+    <!-- Kepala & Surat Tugas -->
+    <div class="card">
+      <div class="card-title">📋 Informasi Umum</div>
+      <div class="form-grid">
+        <div class="form-full">
+          <label>Kepada</label>
+          <input name="kepada" value="{{ laporan.kepada }}">
+        </div>
+        <div>
+          <label>Nomor Surat Tugas</label>
+          <input name="nomor_st" value="{{ laporan.nomor_st }}">
+        </div>
+        <div>
+          <label>Tanggal ST</label>
+          <input name="tanggal_st" value="{{ laporan.tanggal_st }}">
+        </div>
+        <div>
+          <label>Hari, Tanggal</label>
+          <input name="hari_tanggal" value="{{ laporan.hari_tanggal }}">
+        </div>
+        <div>
+          <label>Tembusan</label>
+          <input name="tembusan" value="{{ laporan.tembusan }}">
+        </div>
+      </div>
+    </div>
+
+    <!-- Pelaksana -->
+    <div class="card">
+      <div class="card-title">👤 Pelaksana</div>
+      <div id="pelaksana-list">
+        {% for p in laporan.pelaksana %}
+        <div class="pelaksana-row" style="margin-bottom:.5rem;">
+          <div>
+            <label>Nama</label>
+            <input name="pelaksana_{{ loop.index0 }}_nama" value="{{ p.nama }}">
+          </div>
+          <div>
+            <label>Peran dan Tugas</label>
+            <textarea name="pelaksana_{{ loop.index0 }}_peran" rows="2">{{ p.peran_tugas }}</textarea>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Maksud & Kegiatan -->
+    <div class="card">
+      <div class="card-title">🎯 Maksud & Kegiatan</div>
+      <div class="form-grid">
+        <div class="form-full">
+          <label>Maksud dan Tujuan</label>
+          <textarea name="maksud_tujuan" rows="2">{{ laporan.maksud_tujuan }}</textarea>
+        </div>
+        <div class="form-full">
+          <label>Deskripsi Kegiatan</label>
+          <textarea name="kegiatan_deskripsi" rows="2">{{ laporan.kegiatan_deskripsi }}</textarea>
+        </div>
+        <div>
+          <label>Waktu Mulai</label>
+          <input name="kegiatan_waktu_mulai" value="{{ laporan.kegiatan_waktu_mulai }}" placeholder="08.00">
+        </div>
+        <div>
+          <label>Waktu Selesai</label>
+          <input name="kegiatan_waktu_selesai" value="{{ laporan.kegiatan_waktu_selesai }}" placeholder="selesai">
+        </div>
+        <div>
+          <label>Tempat</label>
+          <input name="kegiatan_tempat" value="{{ laporan.kegiatan_tempat }}">
+        </div>
+      </div>
+    </div>
+
+    <!-- Hasil Kegiatan -->
+    <div class="card">
+      <div class="card-title">📝 Hasil Kegiatan</div>
+      <div class="form-grid">
+        <div class="form-full">
+          <label>Intro</label>
+          <textarea name="hasil_intro" rows="1">{{ laporan.hasil_intro }}</textarea>
+        </div>
+        <div id="hasil-list">
+          {% for h in laporan.hasil %}
+          <div class="form-full">
+            <label>Hasil {{ loop.index }}</label>
+            <textarea name="hasil_{{ loop.index0 }}" rows="2">{{ h }}</textarea>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="form-full">
+          <button type="button" class="btn btn-secondary" style="font-size:.85rem" onclick="addHasil()">+ Tambah Hasil</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Penutup & Tanda Tangan -->
+    <div class="card">
+      <div class="card-title">✍️ Penutup & Tanda Tangan</div>
+      <div class="form-grid">
+        <div class="form-full">
+          <label>Penutup</label>
+          <textarea name="penutup" rows="2">{{ laporan.penutup }}</textarea>
+        </div>
+        <div class="form-full">
+          <label>Tempat, Tanggal TTD</label>
+          <input name="tempat_tanggal_ttd" value="{{ laporan.tempat_tanggal_ttd }}">
+        </div>
+        {% for nama in laporan.nama_ttd %}
+        <div>
+          <label>Nama TTD {{ loop.index }}</label>
+          <input name="ttd_{{ loop.index0 }}" value="{{ nama }}">
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="actions" style="margin-top:0;">
+      <a href="/" class="btn btn-secondary">← Upload Ulang</a>
+      <button type="submit" class="btn btn-primary" id="render-btn">Generate & Download .docx</button>
+    </div>
+  </form>
+  {% endif %}
+</div>
+
+<script>
+  // Drag & drop
+  const dz = document.getElementById('drop-zone');
+  const fi = document.getElementById('file-input');
+  if (dz && fi) {
+    dz.addEventListener('click', () => fi.click());
+    fi.addEventListener('change', () => { if (fi.files.length) dz.querySelector('p:first-of-type').textContent = fi.files[0].name; });
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+    dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('dragover'); fi.files = e.dataTransfer.files; if (fi.files.length) dz.querySelector('p:first-of-type').textContent = fi.files[0].name; });
+  }
+
+  // Add more hasil fields
+  let hasilCount = 0;
+  {% if step == "confirm" %}
+  hasilCount = {{ laporan.hasil|length }};
+  {% endif %}
+  function addHasil() {
+    const list = document.getElementById('hasil-list');
+    const div = document.createElement('div'); div.className = 'form-full';
+    div.innerHTML = '<label>Hasil ' + (hasilCount+1) + '</label><textarea name="hasil_' + hasilCount + '" rows="2"></textarea>';
+    list.appendChild(div); hasilCount++;
+  }
+
+  // Upload form — spinner biasa
+  document.getElementById('upload-form')?.addEventListener('submit', () => {
+    const btn = document.getElementById('parse-btn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Memproses...'; }
+  });
+
+  // Confirm form — fetch blob biar bisa deteksi sukses/gagal
+  document.getElementById('confirm-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const btn = document.getElementById('render-btn');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Memproses...';
+
+    try {
+      const res = await fetch('/render', { method: 'POST', body: new FormData(this) });
+      if (!res.ok) throw new Error(res.statusText);
+
+      const blob = await res.blob();
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const match = disposition.match(/filename[^;=\n]*=([^;]*)/);
+      const name = match ? match[1].trim().replace(/"/g, '') : 'laporan.docx';
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = name;
+      document.body.appendChild(a); a.click();
+      a.remove(); URL.revokeObjectURL(url);
+
+      btn.innerHTML = '✅ Unduhan Berhasil';
+      setTimeout(() => { btn.disabled = false; btn.innerHTML = 'Generate & Download .docx'; }, 3000);
+    } catch {
+      btn.innerHTML = '❌ Unduhan Gagal';
+      btn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
