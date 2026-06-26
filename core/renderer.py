@@ -164,10 +164,10 @@ def _rebuild_ttd(doc, pelaksana: list, nama_ttd: list):
     import re
     used = list(dict.fromkeys(nama_ttd + [p.nama for p in pelaksana]))
 
-    # Collect existing {PELAKSANA_N} slot paragraph indices
+    # Collect existing {PELAKSANA_N} slot paragraph indices (only in TTD area, P[36]+)
     slots = []
     for pi, para in enumerate(doc.paragraphs):
-        if re.search(r"\{\{PELAKSANA_\d+\}\}", para.text):
+        if pi >= 36 and re.search(r"\{\{PELAKSANA_\d+\}\}", para.text):
             slots.append(pi)
 
     if not slots:
@@ -277,4 +277,33 @@ def render_laporan(laporan: LaporanPerdin, template_path: str, output_path: str)
     # ── Step 7: rebuild TTD names ──
     _rebuild_ttd(doc, laporan.pelaksana, laporan.nama_ttd)
 
-    doc.save(output_path)
+    # ── Step 8: save via raw XML (strip drawings, bypass doc.save corruption) ──
+    from lxml import etree
+    import tempfile, pathlib, re
+    from shutil import copyfile
+    from zipfile import ZipFile
+
+    # Get body XML and strip all drawing elements (they cause Word errors)
+    body_xml = etree.tostring(doc.element.body, encoding='unicode')
+    body_xml = re.sub(r'<w:drawing[^>]*>.*?</w:drawing>', '', body_xml, flags=re.DOTALL)
+    body_xml = re.sub(r'<[^>]*blip[^>]*/?>', '', body_xml)
+
+    full_doc_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        f'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+        f' xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"'
+        f' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        f'{body_xml}</w:document>'
+    )
+
+    tmp = pathlib.Path(tempfile.mktemp(suffix='.docx'))
+    with ZipFile(tmp, 'w') as zout:
+        zout.writestr('word/document.xml', full_doc_xml.encode('utf-8'))
+        with ZipFile(template_path) as zin:
+            for name in zin.namelist():
+                if name == 'word/document.xml' or name.startswith('word/media/'):
+                    continue
+                zout.writestr(name, zin.read(name))
+
+    copyfile(tmp, output_path)
+    tmp.unlink()
