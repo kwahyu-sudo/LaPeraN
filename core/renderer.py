@@ -303,7 +303,15 @@ def render_laporan(laporan: LaporanPerdin, template_path: str, output_path: str)
             for name in zin.namelist():
                 if name == 'word/document.xml' or name.startswith('word/media/'):
                     continue
-                zout.writestr(name, zin.read(name))
+                data = zin.read(name)
+                text = data.decode('utf-8', errors='replace')
+                # Strip image relationships
+                if name.endswith('.rels'):
+                    text = re.sub(r'<Relationship[^>]*Type="[^"]*image[^"]*"[^>]*/>', '', text)
+                # Strip image content types
+                if name == '[Content_Types].xml':
+                    text = re.sub(r'<Default Extension="png"[^>]*/>', '', text)
+                zout.writestr(name, text.encode('utf-8'))
 
     copyfile(tmp, output_path)
     tmp.unlink()
