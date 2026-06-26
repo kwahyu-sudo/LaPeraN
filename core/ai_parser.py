@@ -53,7 +53,7 @@ Teks surat tugas:
 def parse_surat_tugas(teks_pdf: str, api_key: str) -> LaporanPerdin:
     client = groq.Groq(api_key=api_key)
     response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
+        model="llama-3.3-70b-versatile",
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": USER_PROMPT.format(teks_pdf=teks_pdf)},
