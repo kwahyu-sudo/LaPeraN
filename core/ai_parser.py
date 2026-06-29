@@ -1,82 +1,110 @@
+"""Single-shot parser: one LLM call, returns structured JSON -> LaporanPerdin."""
+
 import json
+import re
+
 import groq
 
+from config import GROQ_API_KEY
 from .models import LaporanPerdin, Pelaksana
 
+
+def _normalize_waktu(raw: str) -> str:
+    """Strip descriptive time words (pagi, sore, WIB, dll), keep only HH:MM."""
+    if not raw or raw.strip().lower() == "selesai":
+        return raw
+    m = re.search(r'(\d{1,2})[.:](\d{2})', raw)
+    if m:
+        return f"{m.group(1).zfill(2)}:{m.group(2)}"
+    return raw
+
 SYSTEM_PROMPT = """
-Kamu adalah asisten administrasi pemerintah Indonesia yang membuat laporan perjalanan dinas.
-Tugasmu adalah membaca teks surat tugas PDF, lalu mengembalikan data laporan dalam format JSON.
+Kamu adalah asisten administrasi pemerintah Indonesia.
+Ekstrak informasi dari surat tugas berikut dan ubah menjadi laporan perjalanan dinas.
 
-PENTING:
-- Kembalikan HANYA JSON, tanpa preamble, tanpa markdown backtick
-- Jika field tidak ditemukan, gunakan string kosong ""
-- Gunakan bahasa formal birokrasi Indonesia untuk teks naratif
-- Hari/tanggal format: "Kamis, 5 Maret 2026"
-- Waktu format: "10.00 WIB - selesai"
+Return ONLY JSON dengan struktur berikut:
+{
+    "kepada": "nama jabatan penandatangan surat tugas (bukan pelaksana)",
+    "pelaksana": [{"nama": "...", "peran_tugas": "..."}],
+    "tembusan": "pihak yang ditembus (default 'Sekretaris Utama' jika tidak ditemukan)",
+    "hari_tanggal": "hari, tanggal pelaksanaan",
+    "nomor_st": "nomor surat tugas",
+    "tanggal_st": "tanggal surat tugas",
+    "maksud_tujuan": "maksud dan tujuan perjalanan dinas",
+    "kegiatan_deskripsi": "deskripsi kegiatan yang dilaksanakan",
+    "kegiatan_waktu_mulai": "waktu mulai kegiatan (format jam, misal '08.00 WIB' — JAM, bukan tanggal)",
+    "kegiatan_waktu_selesai": "waktu selesai kegiatan (format jam, misal '12.00 WIB' atau 'selesai' — JAM, bukan tanggal)",
+    "kegiatan_tempat": "tempat/lokasi tujuan kegiatan (bukan alamat kantor pengirim)",
+    "hasil_intro": "kalimat pembuka hasil kegiatan",
+    "hasil": ["hasil 1: kalimat deskriptif panjang (1-2 kalimat, bukan frasa pendek)", "hasil 2: ..."],
+    "penutup": "kalimat penutup laporan",
+    "tempat_tanggal_ttd": "tempat, tanggal tanda tangan (format: 'Kota, DD MonthName YYYY', misal 'Bogor, 31 Agustus 2026' — BUKAN format DD-MM-YYYY)",
+    "nama_ttd": ["nama penanda tangan 1", "nama penanda tangan 2", ...]
+}
+
+Isi semua field berdasarkan teks surat tugas. Jika ada field yang tidak ditemukan,
+isi dengan string kosong atau array kosong.
+
+PERHATIAN PERAN_TUGAS (sangat penting):
+- "peran_tugas" TIDAK bisa diekstrak langsung dari dokumen. Dokumen surat tugas biasanya
+  tidak mencantumkan peran masing-masing orang secara detail.
+- Karena itu, peran_tugas harus DI-GENERATE / DI-CIPTAKAN oleh kamu berdasarkan konteks
+  kegiatan perjalanan dinas. Gunakan imajinasimu untuk membuat uraian tugas yang realistis
+  dan spesifik untuk SETIAP orang.
+- Setiap pelaksana WAJIB memiliki peran_tugas yang BERBEDA satu sama lain.
+- Format: kalimat aktif yang menjelaskan kontribusi spesifik orang tersebut
+  (mis: "Melaksanakan koordinasi pensertifikatan tanah bersama BPN",
+   "Menyusun laporan hasil koordinasi", "Mendampingi tim dalam verifikasi lapangan").
+- BUKAN jabatan struktural dan BUKAN pangkat/golongan.
+
+PENTING — JUMLAH PELAKSANA:
+- HANYA ekstrak pelaksana yang benar-benar ADA di dalam teks surat tugas.
+- JANGAN menambah atau menciptakan pelaksana baru yang tidak disebutkan.
+- Jumlah pelaksana di nama_ttd HARUS SAMA dengan jumlah pelaksana.
+- nama_ttd HARUS persis sama (nama dan urutan) dengan nama-nama di pelaksana.
+- Jika dokumen hanya menyebutkan 2 orang, maka pelaksana hanya 2 orang.
 """
 
-USER_PROMPT = """
-Baca surat tugas berikut, lalu isi JSON untuk laporan perjalanan dinas.
 
-PENTING untuk peran_tugas setiap pelaksana:
-- Setiap pelaksana HARUS punya peran_tugas yang BERBEDA
-- Tulis 1-2 kalimat deskriptif, bukan frase pendek
-- Contoh: "Berkoordinasi dengan staf BPN Kota Tangerang Selatan terkait kelengkapan dokumen persyaratan ganti nama sertifikat." bukan "koordinasi dokumen"
+def parse_surat_tugas(teks_pdf: str, api_key: str = "") -> LaporanPerdin:
+    if not api_key:
+        api_key = GROQ_API_KEY
 
-{{
-  "kepada": "Kepala Biro/Jabatan yang dituju laporan",
-  "pelaksana": [
-    {{"nama": "Nama Pelaksana 1", "peran_tugas": "Peran orang ini — BEDA dari yang lain"}},
-    {{"nama": "Nama Pelaksana 2", "peran_tugas": "Peran orang ini — BEDA dari yang lain"}}
-  ],
-  "tembusan": "Sekretaris Utama; Pegawai yang Melaksanakan Perjalanan Dinas",
-  "hari_tanggal": "Hari, Tanggal pelaksanaan",
-  "nomor_st": "Nomor Surat Tugas",
-  "tanggal_st": "Tanggal Surat Tugas",
-  "maksud_tujuan": "Kalimat naratif maksud dan tujuan perjalanan dinas",
-  "kegiatan_deskripsi": "Deskripsi kegiatan yang dilakukan",
-  "kegiatan_waktu_mulai": "Waktu mulai, contoh: 08.00",
-  "kegiatan_waktu_selesai": "Waktu selesai atau 'selesai'",
-  "kegiatan_tempat": "Tempat pelaksanaan",
-  "hasil_intro": "Kalimat intro hasil kegiatan",
-  "hasil": ["Poin hasil kegiatan 1", "Poin hasil kegiatan 2", "Poin hasil kegiatan 3 (atau lebih jika ada)"],
-  "penutup": "Kalimat penutup laporan",
-  "tempat_tanggal_ttd": "Kota, Tanggal tanda tangan",
-  "nama_ttd": ["Nama penandatangan 1", "Nama penandatangan 2"]
-}}
-
-Teks surat tugas:
-{teks_pdf}
-"""
-
-
-def parse_surat_tugas(teks_pdf: str, api_key: str) -> LaporanPerdin:
     client = groq.Groq(api_key=api_key)
-    response = client.chat.completions.create(
+
+    resp = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": USER_PROMPT.format(teks_pdf=teks_pdf)},
+            {"role": "user", "content": f"Proses surat tugas berikut:\n\n{teks_pdf}"},
         ],
+        response_format={"type": "json_object"},
         temperature=0.0,
         max_tokens=2000,
-        response_format={"type": "json_object"},
     )
 
-    raw = response.choices[0].message.content
-    data = json.loads(raw)
+    data = json.loads(resp.choices[0].message.content)
+
+    pelaksana_raw = data.get("pelaksana", [])
+    if isinstance(pelaksana_raw, dict):
+        pelaksana_raw = pelaksana_raw.get("pelaksana", [])
+
+    pelaksana = [
+        Pelaksana(nama=p.get("nama", ""), peran_tugas=p.get("peran_tugas", ""))
+        for p in (pelaksana_raw if isinstance(pelaksana_raw, list) else [])
+    ]
 
     return LaporanPerdin(
         kepada=data.get("kepada", ""),
-        pelaksana=[Pelaksana(**p) for p in data.get("pelaksana", [])],
-        tembusan=data.get("tembusan", ""),
+        pelaksana=pelaksana,
+        tembusan=data.get("tembusan", "Sekretaris Utama"),
         hari_tanggal=data.get("hari_tanggal", ""),
         nomor_st=data.get("nomor_st", ""),
         tanggal_st=data.get("tanggal_st", ""),
         maksud_tujuan=data.get("maksud_tujuan", ""),
         kegiatan_deskripsi=data.get("kegiatan_deskripsi", ""),
-        kegiatan_waktu_mulai=data.get("kegiatan_waktu_mulai", ""),
-        kegiatan_waktu_selesai=data.get("kegiatan_waktu_selesai", "selesai"),
+        kegiatan_waktu_mulai=_normalize_waktu(data.get("kegiatan_waktu_mulai", "")),
+        kegiatan_waktu_selesai=_normalize_waktu(data.get("kegiatan_waktu_selesai", "selesai")),
         kegiatan_tempat=data.get("kegiatan_tempat", ""),
         hasil_intro=data.get("hasil_intro", ""),
         hasil=data.get("hasil", []),

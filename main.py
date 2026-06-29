@@ -13,6 +13,17 @@ from core.renderer import render_laporan
 from core.models import LaporanPerdin
 
 
+def _normalize_waktu(raw: str) -> str:
+    """Strip descriptive time words (pagi, sore, WIB, dll), keep only HH:MM."""
+    import re
+    if not raw or raw.strip().lower() == "selesai":
+        return raw
+    m = re.search(r'(\d{1,2})[.:](\d{2})', raw)
+    if m:
+        return f"{m.group(1).zfill(2)}:{m.group(2)}"
+    return raw
+
+
 def _edit_manual(lap: LaporanPerdin) -> LaporanPerdin:
     print("\n--- Koreksi Manual ---")
     lap.kepada = input(f"Kepada [{lap.kepada}]: ") or lap.kepada
@@ -21,8 +32,8 @@ def _edit_manual(lap: LaporanPerdin) -> LaporanPerdin:
     lap.hari_tanggal = input(f"Hari, Tanggal [{lap.hari_tanggal}]: ") or lap.hari_tanggal
     lap.maksud_tujuan = input(f"Maksud & Tujuan [{lap.maksud_tujuan[:50]}...]: ") or lap.maksud_tujuan
     lap.kegiatan_deskripsi = input(f"Deskripsi Kegiatan [{lap.kegiatan_deskripsi[:50]}...]: ") or lap.kegiatan_deskripsi
-    lap.kegiatan_waktu_mulai = input(f"Waktu Mulai [{lap.kegiatan_waktu_mulai}]: ") or lap.kegiatan_waktu_mulai
-    lap.kegiatan_waktu_selesai = input(f"Waktu Selesai [{lap.kegiatan_waktu_selesai}]: ") or lap.kegiatan_waktu_selesai
+    lap.kegiatan_waktu_mulai = _normalize_waktu(input(f"Waktu Mulai [{lap.kegiatan_waktu_mulai}]: ") or lap.kegiatan_waktu_mulai)
+    lap.kegiatan_waktu_selesai = _normalize_waktu(input(f"Waktu Selesai [{lap.kegiatan_waktu_selesai}]: ") or lap.kegiatan_waktu_selesai)
     lap.kegiatan_tempat = input(f"Tempat [{lap.kegiatan_tempat}]: ") or lap.kegiatan_tempat
     lap.tempat_tanggal_ttd = input(f"Tempat, Tgl TTD [{lap.tempat_tanggal_ttd}]: ") or lap.tempat_tanggal_ttd
 

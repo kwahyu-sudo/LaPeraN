@@ -1,5 +1,6 @@
 """Flask web app for Laporan Perjalanan Dinas Generator."""
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -11,9 +12,20 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import GROQ_API_KEY, TEMPLATE_PATH
 from core.pdf_extractor import extract_text_from_pdf, is_pdf_readable
-from core.ai_parser import parse_surat_tugas
+# from core.ai_parser import parse_surat_tugas      # old (single-shot)
+from agentic_parser import parse_surat_tugas          # new (agentic loop)
 from core.renderer import render_laporan
 from core.models import LaporanPerdin, Pelaksana
+
+
+def _normalize_waktu(raw: str) -> str:
+    """Strip descriptive time words (pagi, sore, WIB, dll), keep only HH:MM."""
+    if not raw or raw.strip().lower() == "selesai":
+        return raw
+    m = re.search(r'(\d{1,2})[.:](\d{2})', raw)
+    if m:
+        return f"{m.group(1).zfill(2)}:{m.group(2)}"
+    return raw
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24).hex()
@@ -114,7 +126,10 @@ def render():
                 "kegiatan_tempat",
                 "hasil_intro", "penutup", "tempat_tanggal_ttd"):
         if key in request.form:
-            data[key] = request.form[key]
+            val = request.form[key]
+            if key in ("kegiatan_waktu_mulai", "kegiatan_waktu_selesai"):
+                val = _normalize_waktu(val)
+            data[key] = val
 
     # Pelaksana
     pelaksana = []

@@ -105,7 +105,10 @@ def _rebuild_hasil(doc, hasil: list):
         for pi in reversed(slots[n_needed:]):
             doc.paragraphs[pi]._element.getparent().remove(doc.paragraphs[pi]._element)
 
-    # Replace each {{HASIL_N}} in order
+    # Replace each {{HASIL_N}} in order — clear paragraph first to
+    # prevent template leftover text (e.g. " dan SHP 1 Nanggewer...")
+    # leaking into rendered output.  ponytail: this is safer than
+    # str.replace because the template may have text after placeholders.
     idx = 0
     for para in list(doc.paragraphs):
         m = re.search(r"\{\{HASIL_\d+\}\}", para.text)
@@ -113,7 +116,9 @@ def _rebuild_hasil(doc, hasil: list):
             continue
         val = hasil[idx] if idx < len(hasil) else ""
         for run in para.runs:
-            run.text = run.text.replace(m.group(), val)
+            run.text = ""
+        if para.runs:
+            para.runs[0].text = val
         idx += 1
 
 
@@ -162,12 +167,24 @@ def _rebuild_table(doc, pelaksana: list):
 def _rebuild_ttd(doc, pelaksana: list, nama_ttd: list):
     """Clone signature rows so all names appear under 'Pelaksana Kegiatan,'."""
     import re
-    used = list(dict.fromkeys(nama_ttd + [p.nama for p in pelaksana]))
+    used = list(dict.fromkeys(nama_ttd))
 
-    # Collect existing {PELAKSANA_N} slot paragraph indices (only in TTD area, P[36]+)
-    slots = []
+    # Find first PELAKSANA_N slot AFTER P[4] (Dari section has them inline)
+    # ponytail: no hardcoded index — _rebuild_hasil may shift paragraphs
+    first_slot = None
     for pi, para in enumerate(doc.paragraphs):
-        if pi >= 36 and re.search(r"\{\{PELAKSANA_\d+\}\}", para.text):
+        if pi <= 4:
+            continue
+        if re.search(r"\{\{PELAKSANA_\d+\}\}", para.text):
+            first_slot = pi
+            break
+    if first_slot is None:
+        return
+
+    # Collect consecutive PELAKSANA_N slots from first_slot onward
+    slots = []
+    for pi in range(first_slot, len(doc.paragraphs)):
+        if re.search(r"\{\{PELAKSANA_\d+\}\}", doc.paragraphs[pi].text):
             slots.append(pi)
 
     if not slots:
@@ -185,12 +202,13 @@ def _rebuild_ttd(doc, pelaksana: list, nama_ttd: list):
             doc.paragraphs[pi]._element.getparent().remove(doc.paragraphs[pi]._element)
 
     # Clean up empty runs in all TTD paragraphs
-    for pi in range(70, len(doc.paragraphs)):
+    for pi in range(first_slot, len(doc.paragraphs)):
         para = doc.paragraphs[pi]
         para.runs[:] = [r for r in para.runs if r.text.strip() or '<w:drawing>' in r._element.xml]
         para.paragraph_format.line_spacing = 1.0
 
-    # Now find and replace each slot in order
+    # Now find and replace each slot in order — clear paragraph first to
+    # prevent template leftover text (e.g. "llahi" suffix) leaking through.
     idx = 0
     for para in doc.paragraphs:
         m = re.search(r"\{\{PELAKSANA_\d+\}\}", para.text)
@@ -198,13 +216,33 @@ def _rebuild_ttd(doc, pelaksana: list, nama_ttd: list):
             continue
         name = used[idx] if idx < len(used) else ""
         for run in para.runs:
-            run.text = run.text.replace(m.group(), name)
-        # Clean up leftover text fragments from XML split names
-        # (only in non-replaced runs - runs that had no placeholder)
-        for run in para.runs:
-            if "{{PELAKSANA_" not in run.text:
-                run.text = run.text.replace("llahi", "")
+            run.text = ""
+        if para.runs:
+            para.runs[0].text = name
+        # Strip numbering from unused/empty slots so they don't show "3." "4."
+        if not name:
+            pPr = para._element.find(qn('w:pPr'))
+            if pPr is not None:
+                numPr = pPr.find(qn('w:numPr'))
+                if numPr is not None:
+                    pPr.remove(numPr)
         idx += 1
+
+
+def _normalize_waktu(raw: str) -> str:
+    """Strip descriptive time words (pagi, sore, WIB, dll), keep only HH:MM.
+
+    ponytail: simple regex — known ceiling: won't handle "setengah delapan" or
+    other non-numeric time expressions. Upgrade to dateparser if needed.
+    """
+    import re
+    if not raw or raw.strip().lower() == "selesai":
+        return raw
+    # Extract first HH:MM or HH.MM pattern
+    m = re.search(r'(\d{1,2})[.:](\d{2})', raw)
+    if m:
+        return f"{m.group(1).zfill(2)}:{m.group(2)}"
+    return raw
 
 
 def render_laporan(laporan: LaporanPerdin, template_path: str, output_path: str):
@@ -220,13 +258,18 @@ def render_laporan(laporan: LaporanPerdin, template_path: str, output_path: str)
         p0.paragraph_format.right_indent = Emu(1270)  # ~0.01"
         p0.paragraph_format.first_line_indent = 0
 
+    # ── Step 1: normalise waktu ──
+    mulai = _normalize_waktu(laporan.kegiatan_waktu_mulai)
+    selesai = _normalize_waktu(laporan.kegiatan_waktu_selesai)
+
     # ── Step 2: combine waktu ──
+    # ponytail: WIB on both sides unless selesai == "selesai"
     waktu = (
-        f"{laporan.kegiatan_waktu_mulai} WIB - {laporan.kegiatan_waktu_selesai}"
-        if laporan.kegiatan_waktu_selesai and laporan.kegiatan_waktu_selesai != "selesai"
-        else f"{laporan.kegiatan_waktu_mulai} WIB"
-        if laporan.kegiatan_waktu_mulai
-        else laporan.kegiatan_waktu_selesai
+        f"{mulai} WIB - {selesai} WIB"
+        if selesai and selesai != "selesai"
+        else f"{mulai} WIB"
+        if mulai
+        else selesai
     )
 
     # Clean up any leftover waktu suffix in P[19]
@@ -262,10 +305,6 @@ def render_laporan(laporan: LaporanPerdin, template_path: str, output_path: str)
     _rebuild_hasil(doc, laporan.hasil)
 
     # ── Step 6: compress spacing between sections ──
-    for pi in range(14, 17):
-        if pi < len(doc.paragraphs):
-            doc.paragraphs[pi].paragraph_format.space_before = 0
-            doc.paragraphs[pi].paragraph_format.space_after = 0
     for pi in range(28, 77):
         if pi < len(doc.paragraphs) and not doc.paragraphs[pi].text.strip():
             doc.paragraphs[pi].paragraph_format.space_before = 0
@@ -274,10 +313,33 @@ def render_laporan(laporan: LaporanPerdin, template_path: str, output_path: str)
     # ── Step 7: rebuild table ──
     _rebuild_table(doc, laporan.pelaksana)
 
+    # ── Step 7b: collapse gap between table and "Kegiatan" heading ──
+    # ponytail: table shrinks when pelaksana < template rows, but empty
+    # paragraphs between table and "Kegiatan" stay fixed → large gap.
+    # Collapse empty spacers, keep Kegiatan minimal spacing, tighten
+    # description paragraph too since heading already provides separation.
+    for pi in range(13, max(18, len(doc.paragraphs))):
+        if pi >= len(doc.paragraphs):
+            break
+        txt = doc.paragraphs[pi].text.strip()
+        if txt == "Kegiatan":
+            from docx.shared import Pt
+            doc.paragraphs[pi].paragraph_format.space_before = Pt(6)
+            doc.paragraphs[pi].paragraph_format.space_after = Pt(2)
+        elif pi == 17 and txt:
+            # description right after "Kegiatan" — tight spacing
+            doc.paragraphs[pi].paragraph_format.space_before = Pt(2)
+            doc.paragraphs[pi].paragraph_format.space_after = 0
+        elif not txt:
+            doc.paragraphs[pi].paragraph_format.space_before = 0
+            doc.paragraphs[pi].paragraph_format.space_after = 0
+            for run in doc.paragraphs[pi].runs:
+                run.text = ""
+
     # ── Step 7: rebuild TTD names ──
     _rebuild_ttd(doc, laporan.pelaksana, laporan.nama_ttd)
 
-    # ── Step 8: save via raw XML (strip drawings, bypass doc.save corruption) ──
+    # ── Step 8: save via raw XML (preserve all original namespace decls) ──
     from lxml import etree
     import tempfile, pathlib, re
     from shutil import copyfile
@@ -288,11 +350,21 @@ def render_laporan(laporan: LaporanPerdin, template_path: str, output_path: str)
     body_xml = re.sub(r'<w:drawing[^>]*>.*?</w:drawing>', '', body_xml, flags=re.DOTALL)
     body_xml = re.sub(r'<[^>]*blip[^>]*/?>', '', body_xml)
 
+    # Extract ALL original namespace declarations from template so body
+    # elements (e.g. w14:paraId, a:, pic:, wp:) can be resolved correctly.
+    # Missing namespaces → invalid XML → Word refuses to open.
+    with ZipFile(template_path) as zin:
+        orig_doc_xml = zin.read('word/document.xml').decode('utf-8')
+        m = re.match(r'<w:document\s+(.*?)>', orig_doc_xml, re.DOTALL)
+        ns_decls = m.group(1) if m else (
+            'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+            ' xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"'
+            ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+        )
+
     full_doc_xml = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
-        f'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
-        f' xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"'
-        f' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        f'<w:document {ns_decls}>'
         f'{body_xml}</w:document>'
     )
 
