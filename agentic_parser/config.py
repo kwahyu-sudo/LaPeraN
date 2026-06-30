@@ -12,13 +12,13 @@ Edit bebas sesuai kebutuhan token budget.
 REASONING_MODEL = "llama-3.1-8b-instant"
 """Model untuk reasoning loop — cuma decision making, irit token."""
 
-HEADER_MODEL = "llama-3.1-8b-instant"
+HEADER_MODEL = "llama-3.3-70b-versatile"
 """Model untuk extract_header_fields — butuh akurasi parsing field."""
 
-PELAKSANA_MODEL = "llama-3.1-8b-instant"
+PELAKSANA_MODEL = "llama-3.3-70b-versatile"
 """Model untuk extract_pelaksana — butuh akurasi ekstrak nama."""
 
-CONTENT_MODEL = "llama-3.1-8b-instant"
+CONTENT_MODEL = "llama-3.3-70b-versatile"
 """Model untuk generate_laporan_content — narasi, perlu kreativitas."""
 
 # ── Batch configuration ─────────────────────────────────────────────
