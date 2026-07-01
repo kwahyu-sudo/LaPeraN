@@ -4,6 +4,20 @@ from copy import deepcopy
 
 from .models import LaporanPerdin
 
+_WML_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+
+
+def _strip_bookmarks(element):
+    """Remove w:bookmarkStart/w:bookmarkEnd from a cloned XML element.
+
+    deepcopy duplicates bookmark IDs → invalid OOXML → Word repair dialog.
+    Call on every clone before inserting into the document tree.
+    """
+    for bm in element.iterfind('.//{%s}bookmarkStart' % _WML_NS):
+        bm.getparent().remove(bm)
+    for bm in element.iterfind('.//{%s}bookmarkEnd' % _WML_NS):
+        bm.getparent().remove(bm)
+
 
 def _replace_text(run, old, new):
     if old in run.text:
@@ -83,7 +97,12 @@ def _rebuild_dari_section(doc, pelaksana: list, kepada: str, tembusan: str, hari
 
 
 def _rebuild_hasil(doc, hasil: list):
-    """Clone or trim hasil paragraphs to match count."""
+    """Clone or trim hasil paragraphs to match count.
+
+    IMPORTANT: This must run BEFORE _replace_in_doc replaces {{HASIL_N}}
+    placeholders, because it detects slots by searching for the literal
+    {{HASIL_N}} pattern in paragraph text.
+    """
     import re
     # Find paragraphs with {{HASIL_N}} placeholders
     slots = []
@@ -99,16 +118,15 @@ def _rebuild_hasil(doc, hasil: list):
     if n_needed > n_slots:
         last_el = doc.paragraphs[slots[-1]]._element
         for _ in range(n_needed - n_slots):
-            last_el.addnext(deepcopy(last_el))
+            new_el = deepcopy(last_el)
+            _strip_bookmarks(new_el)
+            last_el.addnext(new_el)
+            last_el = new_el
     elif n_needed < n_slots:
-        # Remove extra slots (from end)
         for pi in reversed(slots[n_needed:]):
             doc.paragraphs[pi]._element.getparent().remove(doc.paragraphs[pi]._element)
 
-    # Replace each {{HASIL_N}} in order — clear paragraph first to
-    # prevent template leftover text (e.g. " dan SHP 1 Nanggewer...")
-    # leaking into rendered output.  ponytail: this is safer than
-    # str.replace because the template may have text after placeholders.
+    # Replace each {{HASIL_N}} in order
     idx = 0
     for para in list(doc.paragraphs):
         m = re.search(r"\{\{HASIL_\d+\}\}", para.text)
@@ -138,7 +156,9 @@ def _rebuild_table(doc, pelaksana: list):
     elif len(existing_data) < target and existing_data:
         template_row = existing_data[-1]
         for _ in range(target - len(existing_data)):
-            table._tbl.append(deepcopy(template_row._tr))
+            clone = deepcopy(template_row._tr)
+            _strip_bookmarks(clone)
+            table._tbl.append(clone)
 
     data_rows = list(table.rows)[1:]
     for i, p in enumerate(pelaksana):
@@ -146,7 +166,6 @@ def _rebuild_table(doc, pelaksana: list):
         for ci, val in enumerate([f"{i+1}.", p.nama, p.peran_tugas]):
             if ci < len(cells):
                 cell = cells[ci]
-                # Remove numbering, normalize spacing, remove empty extra paras
                 for pi, para in enumerate(list(cell.paragraphs)):
                     pPr = para._element.find(qn('w:pPr'))
                     if pPr is not None:
@@ -165,12 +184,16 @@ def _rebuild_table(doc, pelaksana: list):
 
 
 def _rebuild_ttd(doc, pelaksana: list, nama_ttd: list):
-    """Clone signature rows so all names appear under 'Pelaksana Kegiatan,'."""
+    """Clone signature rows so all names appear under 'Pelaksana Kegiatan,'.
+
+    IMPORTANT: This must run BEFORE _replace_in_doc replaces {{PELAKSANA_N}}
+    placeholders, because it detects slots by searching for the literal
+    {{PELAKSANA_N}} pattern in paragraph text.
+    """
     import re
     used = list(dict.fromkeys(nama_ttd))
 
     # Find first PELAKSANA_N slot AFTER P[4] (Dari section has them inline)
-    # ponytail: no hardcoded index — _rebuild_hasil may shift paragraphs
     first_slot = None
     for pi, para in enumerate(doc.paragraphs):
         if pi <= 4:
@@ -192,11 +215,13 @@ def _rebuild_ttd(doc, pelaksana: list, nama_ttd: list):
     n_slots = len(slots)
     n_needed = len(used)
 
-    # Clone the last slot paragraph for extra names
     if n_needed > n_slots:
         last_el = doc.paragraphs[slots[-1]]._element
         for _ in range(n_needed - n_slots):
-            last_el.addnext(deepcopy(last_el))
+            new_el = deepcopy(last_el)
+            _strip_bookmarks(new_el)
+            last_el.addnext(new_el)
+            last_el = new_el
     elif n_needed < n_slots:
         for pi in reversed(slots[n_needed:]):
             doc.paragraphs[pi]._element.getparent().remove(doc.paragraphs[pi]._element)
@@ -207,8 +232,7 @@ def _rebuild_ttd(doc, pelaksana: list, nama_ttd: list):
         para.runs[:] = [r for r in para.runs if r.text.strip() or '<w:drawing>' in r._element.xml]
         para.paragraph_format.line_spacing = 1.0
 
-    # Now find and replace each slot in order — clear paragraph first to
-    # prevent template leftover text (e.g. "llahi" suffix) leaking through.
+    # Replace each slot in order
     idx = 0
     for para in doc.paragraphs:
         m = re.search(r"\{\{PELAKSANA_\d+\}\}", para.text)
@@ -219,7 +243,6 @@ def _rebuild_ttd(doc, pelaksana: list, nama_ttd: list):
             run.text = ""
         if para.runs:
             para.runs[0].text = name
-        # Strip numbering from unused/empty slots so they don't show "3." "4."
         if not name:
             pPr = para._element.find(qn('w:pPr'))
             if pPr is not None:
@@ -230,15 +253,10 @@ def _rebuild_ttd(doc, pelaksana: list, nama_ttd: list):
 
 
 def _normalize_waktu(raw: str) -> str:
-    """Strip descriptive time words (pagi, sore, WIB, dll), keep only HH:MM.
-
-    ponytail: simple regex — known ceiling: won't handle "setengah delapan" or
-    other non-numeric time expressions. Upgrade to dateparser if needed.
-    """
+    """Strip descriptive time words (pagi, sore, WIB, dll), keep only HH:MM."""
     import re
     if not raw or raw.strip().lower() == "selesai":
         return raw
-    # Extract first HH:MM or HH.MM pattern
     m = re.search(r'(\d{1,2})[.:](\d{2})', raw)
     if m:
         return f"{m.group(1).zfill(2)}:{m.group(2)}"
@@ -255,7 +273,7 @@ def render_laporan(laporan: LaporanPerdin, template_path: str, output_path: str)
         p0 = doc.paragraphs[0]
         p0.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p0.paragraph_format.left_indent = 0
-        p0.paragraph_format.right_indent = Emu(1270)  # ~0.01"
+        p0.paragraph_format.right_indent = Emu(1270)
         p0.paragraph_format.first_line_indent = 0
 
     # ── Step 1: normalise waktu ──
@@ -263,7 +281,6 @@ def render_laporan(laporan: LaporanPerdin, template_path: str, output_path: str)
     selesai = _normalize_waktu(laporan.kegiatan_waktu_selesai)
 
     # ── Step 2: combine waktu ──
-    # ponytail: WIB on both sides unless selesai == "selesai"
     waktu = (
         f"{mulai} WIB - {selesai} WIB"
         if selesai and selesai != "selesai"
@@ -279,7 +296,16 @@ def render_laporan(laporan: LaporanPerdin, template_path: str, output_path: str)
         for run in p19.runs:
             run.text = re.sub(r'[^\x00-\x7F]+\s*selesai', '', run.text)
 
-    # ── Step 3: replace simple {{}} placeholders ──
+    # ── Step 3: rebuild dynamic sections FIRST (before placeholder replace) ──
+    # These functions detect slots by searching for literal {{HASIL_N}} and
+    # {{PELAKSANA_N}} patterns. If we replace those placeholders first, the
+    # slot detection fails and paragraphs get corrupted.
+    _rebuild_hasil(doc, laporan.hasil)
+    _rebuild_ttd(doc, laporan.pelaksana, laporan.nama_ttd)
+
+    # ── Step 4: replace simple {{}} placeholders ──
+    # NOTE: {{HASIL_N}} and {{PELAKSANA_N}} are already handled by the
+    # rebuild functions above. Do NOT include them here.
     replacements = {
         "{{KEPADA}}": laporan.kepada,
         "{{NOMOR_ST}}": laporan.nomor_st,
@@ -297,12 +323,9 @@ def render_laporan(laporan: LaporanPerdin, template_path: str, output_path: str)
 
     _replace_in_doc(doc, replacements)
 
-    # ── Step 4: rebuild Dari section ──
+    # ── Step 5: rebuild Dari section ──
     _rebuild_dari_section(doc, laporan.pelaksana, laporan.kepada,
                           laporan.tembusan, laporan.hari_tanggal)
-
-    # ── Step 5: rebuild hasil ──
-    _rebuild_hasil(doc, laporan.hasil)
 
     # ── Step 6: compress spacing between sections ──
     for pi in range(28, 77):
@@ -314,10 +337,6 @@ def render_laporan(laporan: LaporanPerdin, template_path: str, output_path: str)
     _rebuild_table(doc, laporan.pelaksana)
 
     # ── Step 7b: collapse gap between table and "Kegiatan" heading ──
-    # ponytail: table shrinks when pelaksana < template rows, but empty
-    # paragraphs between table and "Kegiatan" stay fixed → large gap.
-    # Collapse empty spacers, keep Kegiatan minimal spacing, tighten
-    # description paragraph too since heading already provides separation.
     for pi in range(13, max(18, len(doc.paragraphs))):
         if pi >= len(doc.paragraphs):
             break
@@ -327,7 +346,6 @@ def render_laporan(laporan: LaporanPerdin, template_path: str, output_path: str)
             doc.paragraphs[pi].paragraph_format.space_before = Pt(6)
             doc.paragraphs[pi].paragraph_format.space_after = Pt(2)
         elif pi == 17 and txt:
-            # description right after "Kegiatan" — tight spacing
             doc.paragraphs[pi].paragraph_format.space_before = Pt(2)
             doc.paragraphs[pi].paragraph_format.space_after = 0
         elif not txt:
@@ -336,54 +354,8 @@ def render_laporan(laporan: LaporanPerdin, template_path: str, output_path: str)
             for run in doc.paragraphs[pi].runs:
                 run.text = ""
 
-    # ── Step 7: rebuild TTD names ──
-    _rebuild_ttd(doc, laporan.pelaksana, laporan.nama_ttd)
-
-    # ── Step 8: save via raw XML (preserve all original namespace decls) ──
-    from lxml import etree
-    import tempfile, pathlib, re
-    from shutil import copyfile
-    from zipfile import ZipFile
-
-    # Get body XML and strip all drawing elements (they cause Word errors)
-    body_xml = etree.tostring(doc.element.body, encoding='unicode')
-    body_xml = re.sub(r'<w:drawing[^>]*>.*?</w:drawing>', '', body_xml, flags=re.DOTALL)
-    body_xml = re.sub(r'<[^>]*blip[^>]*/?>', '', body_xml)
-
-    # Extract ALL original namespace declarations from template so body
-    # elements (e.g. w14:paraId, a:, pic:, wp:) can be resolved correctly.
-    # Missing namespaces → invalid XML → Word refuses to open.
-    with ZipFile(template_path) as zin:
-        orig_doc_xml = zin.read('word/document.xml').decode('utf-8')
-        m = re.match(r'<w:document\s+(.*?)>', orig_doc_xml, re.DOTALL)
-        ns_decls = m.group(1) if m else (
-            'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
-            ' xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"'
-            ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
-        )
-
-    full_doc_xml = (
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
-        f'<w:document {ns_decls}>'
-        f'{body_xml}</w:document>'
-    )
-
-    tmp = pathlib.Path(tempfile.mktemp(suffix='.docx'))
-    with ZipFile(tmp, 'w') as zout:
-        zout.writestr('word/document.xml', full_doc_xml.encode('utf-8'))
-        with ZipFile(template_path) as zin:
-            for name in zin.namelist():
-                if name == 'word/document.xml' or name.startswith('word/media/'):
-                    continue
-                data = zin.read(name)
-                text = data.decode('utf-8', errors='replace')
-                # Strip image relationships
-                if name.endswith('.rels'):
-                    text = re.sub(r'<Relationship[^>]*Type="[^"]*image[^"]*"[^>]*/>', '', text)
-                # Strip image content types
-                if name == '[Content_Types].xml':
-                    text = re.sub(r'<Default Extension="png"[^>]*/>', '', text)
-                zout.writestr(name, text.encode('utf-8'))
-
-    copyfile(tmp, output_path)
-    tmp.unlink()
+    # ── Step 8: save ──
+    # NOTE: drawing elements (kop surat/gambar) are NOT removed to keep
+    # the document valid. Removing XML drawings while keeping their rels
+    # references produces broken OOXML that Word cannot open.
+    doc.save(output_path)
