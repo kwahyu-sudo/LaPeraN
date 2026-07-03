@@ -65,6 +65,9 @@
 
   {% if step == "confirm" %}
   <form action="/render" method="post" id="confirm-form">
+    {# Carry all laporan data in the form body so /render does not need sessions.
+       HF Spaces iframe blocks third-party cookies, making sessions unreliable. #}
+    <input type="hidden" name="_laporan_json" value="{{ laporan_json|e }}">
     <!-- Kepala & Surat Tugas -->
     <div class="card">
       <div class="card-title">📋 Informasi Umum</div>
@@ -219,34 +222,15 @@
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Memproses...'; }
   });
 
-  // Confirm form — fetch blob biar bisa deteksi sukses/gagal
-  document.getElementById('confirm-form')?.addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const btn = document.getElementById('render-btn');
-    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Memproses...';
-
-    try {
-      const res = await fetch('/render', { method: 'POST', body: new FormData(this) });
-      if (!res.ok) throw new Error(res.statusText);
-
-      const blob = await res.blob();
-      const disposition = res.headers.get('Content-Disposition') || '';
-      const match = disposition.match(/filename[^;=\n]*=([^;]*)/);
-      const name = match ? match[1].trim().replace(/"/g, '') : 'laporan.docx';
-
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = name;
-      document.body.appendChild(a); a.click();
-      a.remove(); URL.revokeObjectURL(url);
-
-      btn.innerHTML = '✅ Unduhan Berhasil';
-      setTimeout(() => { btn.disabled = false; btn.innerHTML = 'Generate & Download .docx'; }, 3000);
-    } catch {
-      btn.innerHTML = '❌ Unduhan Gagal';
-      btn.disabled = false;
-    }
-  });
+  // Confirm form — native submit biar browser langsung streaming file
+    // ke disk (andalkan Content-Disposition: attachment).
+    // Hindari fetch+blob karena di HF Spaces sering truncated oleh proxy.
+    document.getElementById('confirm-form')?.addEventListener('submit', function() {
+      const btn = document.getElementById('render-btn');
+      if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Memproses...'; }
+      // Biarkan form submit normally (tidak preventDefault).
+      // Browser akan langsung men-download file dari response.
+    });
 </script>
 </body>
 </html>

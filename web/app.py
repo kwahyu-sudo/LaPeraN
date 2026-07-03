@@ -1,13 +1,13 @@
 """Flask web app for Laporan Perjalanan Dinas Generator."""
+import io
+import json
 import os
 import re
 import sys
 import tempfile
 from pathlib import Path
 
-import io
-
-from flask import Flask, render_template, request, send_file, session, redirect, url_for, make_response
+from flask import Flask, render_template, request, send_file, redirect, url_for, make_response
 
 # Ensure core/ is importable
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -107,20 +107,26 @@ def parse():
         pdf_path.unlink(missing_ok=True)
         return redirect(url_for("index", error=f"Gagal parse: {e}"))
 
-    # Simpan data ke session + file path
-    session["pdf_path"] = str(pdf_path)
-    session["laporan"] = _lap_to_dict(laporan)
-    session["filename"] = file.filename
+    pdf_path.unlink(missing_ok=True)  # no longer needed after parsing
 
-    return render_template("index.html", step="confirm", laporan=_lap_to_dict(laporan))
+    lap_dict = _lap_to_dict(laporan)
+    # Pass JSON string to template so it can be embedded as a hidden field.
+    # This avoids relying on server-side sessions which break on HF Spaces
+    # (iframe blocks third-party cookies, random secret_key per worker).
+    return render_template("index.html", step="confirm", laporan=lap_dict,
+                           laporan_json=json.dumps(lap_dict, ensure_ascii=False))
 
 
 @app.route("/render", methods=["POST"])
 def render():
-    data = session.get("laporan")
-    pdf_path = session.get("pdf_path")
-    if not data or not pdf_path:
-        return redirect(url_for("index", error="Session expired, upload ulang"))
+    # Read laporan data from the hidden form field (session-free).
+    raw_json = request.form.get("_laporan_json", "")
+    if not raw_json:
+        return redirect(url_for("index", error="Data laporan tidak ditemukan, upload ulang"))
+    try:
+        data = json.loads(raw_json)
+    except json.JSONDecodeError:
+        return redirect(url_for("index", error="Data laporan rusak, upload ulang"))
 
     # Merge edited fields from form
     for key in ("kepada", "nomor_st", "tanggal_st", "hari_tanggal", "tembusan",
@@ -174,7 +180,7 @@ def render():
     output_path = UPLOAD_DIR / filename
     render_laporan(laporan, str(TEMPLATE_PATH), str(output_path))
 
-    session.clear()
+    # No session to clear — all data was in the form POST body.
 
     # Read the generated file into memory so send_file streams bytes
     # directly instead of relying on filesystem path (HF Spaces proxy
