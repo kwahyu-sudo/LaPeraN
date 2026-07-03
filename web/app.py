@@ -5,7 +5,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-from flask import Flask, render_template, request, send_file, session, redirect, url_for
+import io
+
+from flask import Flask, render_template, request, send_file, session, redirect, url_for, make_response
 
 # Ensure core/ is importable
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -173,7 +175,32 @@ def render():
     render_laporan(laporan, str(TEMPLATE_PATH), str(output_path))
 
     session.clear()
-    return send_file(str(output_path), as_attachment=True, download_name=filename)
+
+    # Read the generated file into memory so send_file streams bytes
+    # directly instead of relying on filesystem path (HF Spaces proxy
+    # can corrupt path-based responses when MIME type is inferred).
+    DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    file_bytes = output_path.read_bytes()
+    file_size = len(file_bytes)
+    buf = io.BytesIO(file_bytes)
+    buf.seek(0)
+
+    # Clean up temp file early (bytes already in memory)
+    output_path.unlink(missing_ok=True)
+
+    response = make_response(
+        send_file(
+            buf,
+            mimetype=DOCX_MIME,
+            as_attachment=True,
+            download_name=filename,
+        )
+    )
+    response.headers["Content-Length"] = file_size
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+
+    return response
 
 
 if __name__ == "__main__":
