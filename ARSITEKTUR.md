@@ -284,6 +284,12 @@ Set `GROQ_API_KEY` di Settings → Repository Secrets.
 
 ---
 
+## 11. Perbaikan & Fitur Tambahan Terbaru
+1. **Bug TTD pelaksana berkurang 1**: Memperbaiki pencocokan regex placeholder di `_rebuild_ttd` agar hanya memproses paragraf di area tanda tangan (`slots`), menghindari pencocokan `{{PELAKSANA_N}}` pada paragraf 4 (header "Dari") yang menyebabkan pergeseran indeks (off-by-one).
+2. **Unduh File Terkunci**: Menambahkan mekanisme `setTimeout` di UI (`index.html`) untuk mengaktifkan kembali tombol unduh setelah 3 detik, mencegah tombol terkunci dalam status "Memproses...".
+
+---
+
 ## 12. Pengembangan Lanjutan
 
 - [ ] Model fallback (gemma2-9b / llama-3.1-8b) jika rate limit

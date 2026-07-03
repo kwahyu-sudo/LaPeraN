@@ -227,7 +227,14 @@
     // Hindari fetch+blob karena di HF Spaces sering truncated oleh proxy.
     document.getElementById('confirm-form')?.addEventListener('submit', function() {
       const btn = document.getElementById('render-btn');
-      if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Memproses...'; }
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Memproses...';
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.innerHTML = 'Generate & Download .docx';
+        }, 3000);
+      }
       // Biarkan form submit normally (tidak preventDefault).
       // Browser akan langsung men-download file dari response.
     });

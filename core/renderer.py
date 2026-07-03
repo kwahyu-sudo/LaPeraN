@@ -233,11 +233,8 @@ def _rebuild_ttd(doc, pelaksana: list, nama_ttd: list):
         para.paragraph_format.line_spacing = 1.0
 
     # Replace each slot in order
-    idx = 0
-    for para in doc.paragraphs:
-        m = re.search(r"\{\{PELAKSANA_\d+\}\}", para.text)
-        if not m:
-            continue
+    for idx, para_idx in enumerate(slots):
+        para = doc.paragraphs[para_idx]
         name = used[idx] if idx < len(used) else ""
         for run in para.runs:
             run.text = ""
@@ -249,7 +246,6 @@ def _rebuild_ttd(doc, pelaksana: list, nama_ttd: list):
                 numPr = pPr.find(qn('w:numPr'))
                 if numPr is not None:
                     pPr.remove(numPr)
-        idx += 1
 
 
 def _normalize_waktu(raw: str) -> str:
