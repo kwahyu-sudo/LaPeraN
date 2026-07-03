@@ -22,7 +22,7 @@
                           ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  ai_parser.py: LLM → JSON → LaporanPerdin object                    │
-│  ─ Groq API (llama-3.3-70b-versatile)                              │
+│  ─ Groq API (openai/gpt-oss-120b)                                  │
 │  ─ Satu panggilan: parse + generate narasi sekaligus               │
 │  ─ response_format={"type": "json_object"}                          │
 │  ─ temperature=0.0 untuk konsistensi                                │

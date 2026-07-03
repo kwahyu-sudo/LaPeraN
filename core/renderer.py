@@ -153,8 +153,8 @@ def _rebuild_table(doc, pelaksana: list):
     if len(existing_data) > target:
         for row in reversed(existing_data[target:]):
             table._tbl.remove(row._tr)
-    elif len(existing_data) < target and existing_data:
-        template_row = existing_data[-1]
+    elif len(existing_data) < target:
+        template_row = existing_data[-1] if existing_data else table.rows[-1]
         for _ in range(target - len(existing_data)):
             clone = deepcopy(template_row._tr)
             _strip_bookmarks(clone)
@@ -232,9 +232,13 @@ def _rebuild_ttd(doc, pelaksana: list, nama_ttd: list):
         para.runs[:] = [r for r in para.runs if r.text.strip() or '<w:drawing>' in r._element.xml]
         para.paragraph_format.line_spacing = 1.0
 
-    # Replace each slot in order
-    for idx, para_idx in enumerate(slots):
-        para = doc.paragraphs[para_idx]
+    # Replace each slot in order (find them dynamically after tree changes)
+    current_slots = []
+    for pi in range(first_slot, len(doc.paragraphs)):
+        if re.search(r"\{\{PELAKSANA_\d+\}\}", doc.paragraphs[pi].text):
+            current_slots.append(doc.paragraphs[pi])
+
+    for idx, para in enumerate(current_slots):
         name = used[idx] if idx < len(used) else ""
         for run in para.runs:
             run.text = ""

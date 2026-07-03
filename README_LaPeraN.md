@@ -1,12 +1,3 @@
----
-title: Generator Laporan Perjalanan Dinas
-emoji: 📄
-colorFrom: blue
-colorTo: indigo
-sdk: docker
-pinned: false
----
-
 # LaPeraN — Agentic Document Generator for Civil Servant Administration
 
 > **Upload PDF Surat Tugas → AI parse → Konfirmasi → Download .docx**

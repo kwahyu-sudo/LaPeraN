@@ -26,9 +26,9 @@
 │                                                              │
 │  Reasoning: llama-3.1-8b-instant (decision making)           │
 │  Workers (model per tool via agentic_parser/config.py):      │
-│    extract_header_fields  → llama-3.3-70b-versatile          │
-│    extract_pelaksana      → llama-3.3-70b-versatile          │
-│    generate_laporan_content → llama-3.3-70b-versatile        │
+│    extract_header_fields  → openai/gpt-oss-120b              │
+│    extract_pelaksana      → openai/gpt-oss-120b              │
+│    generate_laporan_content → openai/gpt-oss-120b            │
 │    validate_completeness  → pure Python (no LLM call)        │
 │                                                              │
 │  Fallback: core/ai_parser.py (single-shot) jika agentic gagal│
