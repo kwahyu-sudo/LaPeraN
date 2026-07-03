@@ -161,7 +161,7 @@ def _extract_header(teks: str, api_key: str) -> dict:
         user=f"Teks surat tugas:\n\n{teks[:4000]}",
         api_key=api_key,
         model=model,
-        max_tok=500,
+        max_tok=1000,
     )
 
 
@@ -182,7 +182,7 @@ def _extract_pelaksana(teks: str, api_key: str) -> list[dict]:
         user=f"Teks surat tugas:\n\n{teks[:4000]}",
         api_key=api_key,
         model=model,
-        max_tok=600,
+        max_tok=1500,
     )
     raw = data.get("pelaksana", data) if isinstance(data, dict) else data
     return raw if isinstance(raw, list) else [raw]
@@ -235,7 +235,7 @@ def _generate_content(args: dict, api_key: str, state: dict | None = None) -> di
         api_key=api_key,
         model=model,
         temp=0.3,
-        max_tok=1000,
+        max_tok=3000,
     )
 
 
