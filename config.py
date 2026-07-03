@@ -1,4 +1,6 @@
 import os
+import tempfile
+import base64
 from pathlib import Path
 
 BASE_DIR = Path(__file__).parent
@@ -13,4 +15,10 @@ if _env_file.exists():
             os.environ.setdefault(_k.strip(), _v.strip())
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-TEMPLATE_PATH = BASE_DIR / "templates" / "template_laporan.docx"
+
+# Write template from base64 string to a temp file (bypasses HF git binary restrictions)
+from templates.template_data import TEMPLATE_B64
+_tmp_dir = Path(tempfile.gettempdir())
+TEMPLATE_PATH = _tmp_dir / "template_laporan.docx"
+TEMPLATE_PATH.write_bytes(base64.b64decode(TEMPLATE_B64))
+

@@ -7,4 +7,5 @@ __pycache__/
 
 # Output
 output/
-*.docx
+# Ignore generated docx in root/output, but NOT in templates/
+/*.docx
