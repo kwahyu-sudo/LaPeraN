@@ -65,14 +65,30 @@ def parse_surat_tugas(teks_pdf: str, api_key: str = "") -> LaporanPerdin:
         iterations += 1
         print(f"\n--- Iterasi {iterations}/{MAX_ITERATIONS} ---")
 
-        response = client.chat.completions.create(
-            model=REASONING_MODEL,
-            messages=messages,
-            tools=TOOLS,
-            tool_choice="auto",
-            temperature=0.0,
-            max_tokens=500,  # ponytail: 1000 terlalu besar utk free tier
-        )
+        try:
+            response = client.chat.completions.create(
+                model=REASONING_MODEL,
+                messages=messages,
+                tools=TOOLS,
+                tool_choice="auto",
+                temperature=0.0,
+                max_tokens=500,  # ponytail: 1000 terlalu besar utk free tier
+            )
+        except groq.BadRequestError as e:
+            # Groq returns 400 when reasoning model sends malformed tool args
+            # (e.g. pelaksana as string instead of array). Inject error hint
+            # so model can retry with corrected arguments.
+            print(f"  [WARN] Groq 400 error: {e}")
+            messages.append({
+                "role": "user",
+                "content": (
+                    "Tool call sebelumnya GAGAL karena format argumen salah. "
+                    "Jangan kirim pelaksana — data pelaksana sudah tersedia dari "
+                    "extract_pelaksana. Cukup kirim kepada, hari_tanggal, nomor_st, "
+                    "tujuan_kegiatan."
+                ),
+            })
+            continue
 
         msg = response.choices[0].message
 
@@ -103,7 +119,11 @@ def parse_surat_tugas(teks_pdf: str, api_key: str = "") -> LaporanPerdin:
             except json.JSONDecodeError:
                 args = {}
 
-            result_str = handle_tool_call(name, args, state, api_key)
+            try:
+                result_str = handle_tool_call(name, args, state, api_key)
+            except Exception as exc:
+                print(f"  [ERR] Tool {name} gagal: {exc}")
+                result_str = json.dumps({"error": str(exc)}, ensure_ascii=False)
 
             messages.append({
                 "role": "tool",

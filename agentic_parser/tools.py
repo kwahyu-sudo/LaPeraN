@@ -62,7 +62,8 @@ TOOLS = [
             "name": "generate_laporan_content",
             "description": (
                 "Generate narasi laporan perjalanan dinas. "
-                "Parameter INPUT: kepada, pelaksana, hari_tanggal, nomor_st, tujuan_kegiatan. "
+                "Parameter INPUT: kepada, hari_tanggal, nomor_st, tujuan_kegiatan. "
+                "JANGAN kirim pelaksana — data pelaksana otomatis diambil dari hasil extract_pelaksana. "
                 "Output (maksud_tujuan, kegiatan, hasil, penutup, ttd) dihasilkan oleh worker model — "
                 "jangan dikirim sebagai argumen."
             ),
@@ -70,22 +71,6 @@ TOOLS = [
                 "type": "object",
                 "properties": {
                     "kepada": {"type": "string"},
-                    "pelaksana": {
-                        "type": "array",
-                        "description": "Daftar pelaksana dari hasil extract_pelaksana",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "nama": {"type": "string"},
-                                "peran_tugas": {"type": "string"}
-                            },
-                            "required": ["nama"]
-                        }
-                    },
-                    "pelaksana_json": {
-                        "type": "string",
-                        "description": "DEPRECATED — gunakan pelaksana saja"
-                    },
                     "hari_tanggal": {"type": "string"},
                     "nomor_st": {"type": "string"},
                     "tujuan_kegiatan": {
