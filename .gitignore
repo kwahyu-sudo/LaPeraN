@@ -9,3 +9,9 @@ __pycache__/
 output/
 # Ignore generated docx in root/output, but NOT in templates/
 /*.docx
+
+# Binary assets (HuggingFace rejects via plain git; use Xet or keep local only)
+input/*.pdf
+templates/*.docx
+xet.zip
+xet/
