@@ -1,6 +1,6 @@
 # Arsitektur: Generator Laporan Perjalanan Dinas Otomatis
 
-> **Stack:** Python · Flask · pdfplumber · python-docx · Groq API (LLaMA 3.3 70B)  
+> **Stack:** Python · Flask · pdfplumber · python-docx · Groq API (GPT-OSS-120B)  
 > **Deploy:** Hugging Face Spaces (Docker)  
 > **Input:** PDF Surat Tugas ber-TTE BSrE  
 > **Output:** File `.docx` laporan perjalanan dinas
@@ -292,7 +292,7 @@ Set `GROQ_API_KEY` di Settings → Repository Secrets.
 
 ## 12. Pengembangan Lanjutan
 
-- [ ] Model fallback (gemma2-9b / llama-3.1-8b) jika rate limit
+- [ ] Model fallback (gemma2-9b / openai/gpt-oss-20b) jika rate limit
 - [ ] Multiple template format
 - [ ] Riwayat generate
 - [ ] Export PDF

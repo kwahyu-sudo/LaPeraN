@@ -24,7 +24,7 @@
 │  AGENTIC PARSER (default)                                    │
 │  agentic_parser/loop.py                                      │
 │                                                              │
-│  Reasoning: llama-3.1-8b-instant (decision making)           │
+│  Reasoning: openai/gpt-oss-20b (decision making)           │
 │  Workers (model per tool via agentic_parser/config.py):      │
 │    extract_header_fields  → openai/gpt-oss-120b              │
 │    extract_pelaksana      → openai/gpt-oss-120b              │
@@ -162,7 +162,7 @@ class LaporanPerdin:
                    ▼
 ┌─────────────────────────────────────────┐
 │  Reasoning Loop (max 5 iterations)      │
-│  Model: llama-3.1-8b-instant            │
+│  Model: openai/gpt-oss-20b              │
 │  Tools: auto, temperature=0.0           │
 │                                         │
 │  ┌─────────────────────────────────┐    │
@@ -191,9 +191,9 @@ class LaporanPerdin:
 
 | Tool | Worker Model | Input | Output |
 |---|---|---|---|
-| `extract_header_fields` | llama-3.3-70b | (reads `_teks` from state) | `{kepada, nomor_st, tanggal_st, hari_tanggal, tembusan}` |
-| `extract_pelaksana` | llama-3.3-70b | (reads `_teks` from state) | `[{nama, peran_tugas}, ...]` |
-| `generate_laporan_content` | llama-3.3-70b | `{kepada, pelaksana, hari_tanggal, nomor_st, tujuan_kegiatan}` | `{maksud_tujuan, kegiatan_*, hasil, penutup, ttd}` |
+| `extract_header_fields` | openai/gpt-oss-120b | (reads `_teks` from state) | `{kepada, nomor_st, tanggal_st, hari_tanggal, tembusan}` |
+| `extract_pelaksana` | openai/gpt-oss-120b | (reads `_teks` from state) | `[{nama, peran_tugas}, ...]` |
+| `generate_laporan_content` | openai/gpt-oss-120b | `{kepada, pelaksana, hari_tanggal, nomor_st, tujuan_kegiatan}` | `{maksud_tujuan, kegiatan_*, hasil, penutup, ttd}` |
 | `validate_completeness` | (pure Python) | state dict | `{is_complete, missing_fields}` |
 
 ### 4.3 Key Design Decisions

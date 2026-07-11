@@ -239,14 +239,5 @@
       // Browser akan langsung men-download file dari response.
     });
 </script>
-
-<!-- Vercel Speed Insights (framework-agnostic autoload) -->
-<script>
-  window.si = function a(...params) { (window.siq = window.siq || []).push(params); };
-</script>
-<script defer src="/_vercel/speed-insights/script.js"></script>
-
-<!-- Vercel Web Analytics (framework-agnostic autoload) -->
-<script defer src="/_vercel/insights/script.js"></script>
 </body>
 </html>

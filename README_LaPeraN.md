@@ -25,7 +25,7 @@ Every business trip requires a formal *Laporan Perjalanan Dinas* — a structure
 [pdfplumber: extract text layer]
         ↓
 [Agentic Parser — reasoning loop]
-  llama-3.1-8b-instant (orchestrator)
+  openai/gpt-oss-20b (orchestrator)
     ├─→ extract_header_fields   → openai/gpt-oss-120b
     ├─→ extract_pelaksana       → openai/gpt-oss-120b
     ├─→ generate_laporan_content → openai/gpt-oss-120b

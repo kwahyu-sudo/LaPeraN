@@ -9,8 +9,8 @@ Edit bebas sesuai kebutuhan token budget.
 
 # ── Model per tool ──────────────────────────────────────────────────
 
-REASONING_MODEL = "llama-3.1-8b-instant"
-"""Model untuk reasoning loop — cuma decision making, irit token."""
+REASONING_MODEL = "openai/gpt-oss-20b"
+"""Model untuk reasoning loop — decision making."""
 
 HEADER_MODEL = "openai/gpt-oss-120b"
 """Model untuk extract_header_fields — butuh akurasi parsing field."""
@@ -36,5 +36,5 @@ MAX_ITERATIONS = 5
 """Maksimal iterasi reasoning loop sebelum fallback."""
 
 # ── Tips ───────────────────────────────────────────────────────────
-# Mau hemat token? Ganti CONTENT_MODEL ke 3.1, parsing tetap 3.3.
+# Mau hemat token? Ganti CONTENT_MODEL ke gpt-oss-20b, parsing tetap gpt-oss-120b.
 # Mau maksimal irit? Ganti HEADER_MODEL & PELAKSANA_MODEL juga.

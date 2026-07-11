@@ -1,4 +1,4 @@
-"""Reasoning loop — llama-3.1-8b-instant decide tool calls, worker tools dieksekusi terpisah.
+"""Reasoning loop — openai/gpt-oss-20b decide tool calls, worker tools dieksekusi terpisah.
 
 Signature parse_surat_tugas(teks, api_key) -> LaporanPerdin
 sama persis dengan core.ai_parser, jadi tinggal ganti import kalau mau switch.
@@ -72,7 +72,7 @@ def parse_surat_tugas(teks_pdf: str, api_key: str = "") -> LaporanPerdin:
                 tools=TOOLS,
                 tool_choice="auto",
                 temperature=0.0,
-                max_tokens=500,  # ponytail: 1000 terlalu besar utk free tier
+                max_tokens=800,  # gpt-oss-20b lebih capable, allow longer tool calls
             )
         except groq.BadRequestError as e:
             # Groq returns 400 when reasoning model sends malformed tool args

@@ -27,5 +27,5 @@ Upload PDF Surat Tugas → AI parse → Konfirmasi → Download `.docx`.
 ## Tech Stack
 
 - Python + Flask
-- Groq API (LLaMA 3.3 70B)
+- Groq API (GPT-OSS-120B)
 - pdfplumber + python-docx

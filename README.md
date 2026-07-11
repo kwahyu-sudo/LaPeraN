@@ -34,7 +34,7 @@ Every business trip requires a formal *Laporan Perjalanan Dinas* — a structure
 [pdfplumber: extract text layer]
         ↓
 [Agentic Parser — reasoning loop]
-  llama-3.1-8b-instant (orchestrator)
+  openai/gpt-oss-20b (orchestrator)
     ├─→ extract_header_fields   → openai/gpt-oss-120b
     ├─→ extract_pelaksana       → openai/gpt-oss-120b
     ├─→ generate_laporan_content → openai/gpt-oss-120b
@@ -177,6 +177,32 @@ groq>=1.5.0
 flask>=3.0.0
 lxml>=5.0.0
 ```
+
+---
+
+## Analytics — Vercel Speed Insights & Web Analytics
+
+LaPeraN is a **Flask** app (not Next.js), so the framework-specific `<SpeedInsights/>` and
+`<Analytics/>` components do not apply. Instead, the framework-agnostic Vercel snippets are
+injected directly into the Jinja2 template at `web/templates/index.html`, just before `</body>`:
+
+```html
+<!-- Speed Insights -->
+<script>
+  window.si = function a(...params) { (window.siq = window.siq || []).push(params); };
+</script>
+<script defer src="/_vercel/speed-insights/script.js"></script>
+
+<!-- Web Analytics -->
+<script defer src="/_vercel/insights/script.js"></script>
+```
+
+Notes:
+- The scripts are served automatically from `/_vercel/...` when deployed on Vercel.
+- They are a no-op in local/dev environments (Vercel only serves the scripts in production builds).
+- `@vercel/speed-insights` and `@vercel/analytics` are listed in the repo root `package.json` solely
+  for this purpose; no Node build step is required.
+- Data flows into the Speed Insights and Analytics dashboards on Vercel.
 
 ---
 
