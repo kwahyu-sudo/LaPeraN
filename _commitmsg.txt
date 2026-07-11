@@ -1,5 +1,0 @@
-Untrack binary assets (HuggingFace rejects via plain git)
-
-Keep .pdf/.docx/xet binaries out of version control; tracked on disk only.
-
-Co-authored-by: CommandCodeBot <noreply@commandcode.ai>
