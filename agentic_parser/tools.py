@@ -62,7 +62,7 @@ TOOLS = [
             "name": "generate_laporan_content",
             "description": (
                 "Generate narasi laporan perjalanan dinas. "
-                "Parameter INPUT: kepada, hari_tanggal, nomor_st, tujuan_kegiatan. "
+                "Parameter INPUT: kepada, hari_tanggal, nomor_st, tujuan_kegiatan, konteks_hasil (opsional). "
                 "JANGAN kirim pelaksana — data pelaksana otomatis diambil dari hasil extract_pelaksana. "
                 "Output (maksud_tujuan, kegiatan, hasil, penutup, ttd) dihasilkan oleh worker model — "
                 "jangan dikirim sebagai argumen."
@@ -76,6 +76,10 @@ TOOLS = [
                     "tujuan_kegiatan": {
                         "type": "string",
                         "description": "Inferensikan dari konteks surat tugas"
+                    },
+                    "konteks_hasil": {
+                        "type": "string",
+                        "description": "Konteks/ringkasan hasil perjalanan dinas dari user. Jika ada, gunakan sebagai dasar untuk membuat kalimat hasil yang lebih panjang dan formal."
                     }
                 },
                 "required": ["kepada", "hari_tanggal", "nomor_st", "tujuan_kegiatan"]
@@ -194,29 +198,47 @@ def _generate_content(args: dict, api_key: str, state: dict | None = None) -> di
             pelaksana = []
     pelaksana_str = json.dumps(pelaksana, ensure_ascii=False, indent=2)
 
+    # Ambil konteks_hasil dari state atau args
+    konteks_hasil = (state or {}).get("_konteks_hasil", "") or args.get("konteks_hasil", "")
+
+    system_prompt = (
+        "Kamu adalah penulis laporan perjalanan dinas pemerintah Indonesia. "
+        "Buat narasi laporan berdasarkan data yang diberikan. "
+        "Return ONLY JSON dengan field: maksud_tujuan, kegiatan_deskripsi, "
+        "kegiatan_waktu_mulai (format jam, misal '08.00 WIB'), "
+        "kegiatan_waktu_selesai (format jam, misal '12.00 WIB' atau 'selesai'), "
+        "kegiatan_tempat (lokasi tujuan kegiatan, bukan alamat kantor pengirim), "
+        "hasil_intro, hasil (list of strings — setiap item berupa kalimat deskriptif panjang 1-2 kalimat, bukan frasa pendek), penutup, "
+        "tempat_tanggal_ttd (format 'Kota, DD MonthName YYYY', misal 'Bogor, 31 Agustus 2026' — BUKAN DD-MM-YYYY), "
+        "nama_ttd (list of strings).\n\n"
+        "PENTING — nama_ttd HARUS persis sama dengan nama-nama pelaksana yang diberikan. "
+        "Jangan tambah atau kurangi. Urutannya juga sama.\n"
+        "PENTING — kegiatan_waktu_mulai dan kegiatan_waktu_selesai adalah JAM, bukan tanggal. "
+        "Gunakan format 'HH.MM WIB', jangan pakai format tanggal."
+    )
+
+    user_content = (
+        f"Kepada: {args.get('kepada', '')}\n"
+        f"Pelaksana:\n{pelaksana_str}\n"
+        f"Hari/Tanggal: {args.get('hari_tanggal', '')}\n"
+        f"Nomor ST: {args.get('nomor_st', '')}\n"
+        f"Tujuan Kegiatan: {args.get('tujuan_kegiatan', '')}"
+    )
+
+    if konteks_hasil:
+        system_prompt += (
+            "\n\nKONTEKS HASIL PERJALANAN DARI USER: "
+            "User telah memberikan konteks/ringkasan hasil perjalanan dinas. "
+            "Gunakan konteks tersebut sebagai DASAR untuk membuat bagian 'hasil'. "
+            "Kembangkan konteks singkat menjadi kalimat paragraf yang lebih detail, "
+            "formal, dan panjang sesuai standar laporan pemerintah Indonesia. "
+            "Jangan ubah makna konteks, hanya perjelas dan perluas."
+        )
+        user_content += f"\n\nKonteks Hasil Perjalanan:\n{konteks_hasil}"
+
     return _call_llm(
-        system=(
-            "Kamu adalah penulis laporan perjalanan dinas pemerintah Indonesia. "
-            "Buat narasi laporan berdasarkan data yang diberikan. "
-            "Return ONLY JSON dengan field: maksud_tujuan, kegiatan_deskripsi, "
-            "kegiatan_waktu_mulai (format jam, misal '08.00 WIB'), "
-            "kegiatan_waktu_selesai (format jam, misal '12.00 WIB' atau 'selesai'), "
-            "kegiatan_tempat (lokasi tujuan kegiatan, bukan alamat kantor pengirim), "
-            "hasil_intro, hasil (list of strings — setiap item berupa kalimat deskriptif panjang 1-2 kalimat, bukan frasa pendek), penutup, "
-            "tempat_tanggal_ttd (format 'Kota, DD MonthName YYYY', misal 'Bogor, 31 Agustus 2026' — BUKAN DD-MM-YYYY), "
-            "nama_ttd (list of strings).\n\n"
-            "PENTING — nama_ttd HARUS persis sama dengan nama-nama pelaksana yang diberikan. "
-            "Jangan tambah atau kurangi. Urutannya juga sama.\n"
-            "PENTING — kegiatan_waktu_mulai dan kegiatan_waktu_selesai adalah JAM, bukan tanggal. "
-            "Gunakan format 'HH.MM WIB', jangan pakai format tanggal."
-        ),
-        user=(
-            f"Kepada: {args.get('kepada', '')}\n"
-            f"Pelaksana:\n{pelaksana_str}\n"
-            f"Hari/Tanggal: {args.get('hari_tanggal', '')}\n"
-            f"Nomor ST: {args.get('nomor_st', '')}\n"
-            f"Tujuan Kegiatan: {args.get('tujuan_kegiatan', '')}"
-        ),
+        system=system_prompt,
+        user=user_content,
         api_key=api_key,
         model=model,
         temp=0.3,

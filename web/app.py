@@ -101,8 +101,9 @@ def parse():
         return redirect(url_for("index", error="PDF tidak punya layer teks (scan). Upload TTE digital asli."))
 
     teks = extract_text_from_pdf(str(pdf_path))
+    konteks_hasil = request.form.get("konteks_hasil", "").strip()
     try:
-        laporan = parse_surat_tugas(teks, GROQ_API_KEY)
+        laporan = parse_surat_tugas(teks, GROQ_API_KEY, konteks_hasil=konteks_hasil or None)
     except Exception as e:
         pdf_path.unlink(missing_ok=True)
         return redirect(url_for("index", error=f"Gagal parse: {e}"))

@@ -56,6 +56,10 @@
         <p>Format: PDF TTE BSrE (bukan scan)</p>
       <input type="file" name="pdf" accept=".pdf" id="file-input">
       </div>
+      <div style="margin-top:1rem;">
+        <label for="konteks_hasil">Konteks Hasil Perjalanan <span style="color:#999;font-weight:400;">(opsional)</span></label>
+        <textarea name="konteks_hasil" id="konteks_hasil" rows="3" placeholder="Tuliskan konteks/ringkasan hasil perjalanan dinas. Biarkan kosong jika ingin AI membuat otomatis."></textarea>
+      </div>
       <div class="actions">
         <button type="submit" class="btn btn-primary" id="parse-btn">Parse dengan AI</button>
       </div>

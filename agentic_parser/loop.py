@@ -35,13 +35,15 @@ Kamu hanya perlu memutuskan tool mana yang dipanggil dan dengan argumen apa.
 """
 
 
-def parse_surat_tugas(teks_pdf: str, api_key: str = "") -> LaporanPerdin:
+def parse_surat_tugas(teks_pdf: str, api_key: str = "", konteks_hasil: str | None = None) -> LaporanPerdin:
     """Agentic version: reasoning loop + tool calls. Signature sama dengan original."""
     if not api_key:
         api_key = GROQ_API_KEY
 
     client = groq.Groq(api_key=api_key)
     state: dict = {"_teks": teks_pdf}
+    if konteks_hasil:
+        state["_konteks_hasil"] = konteks_hasil
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
