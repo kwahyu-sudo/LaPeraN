@@ -1,22 +1,12 @@
 """Single-shot parser: one LLM call, returns structured JSON -> LaporanPerdin."""
 
 import json
-import re
 
 import groq
 
 from config import GROQ_API_KEY
 from .models import LaporanPerdin, Pelaksana
-
-
-def _normalize_waktu(raw: str) -> str:
-    """Strip descriptive time words (pagi, sore, WIB, dll), keep only HH:MM."""
-    if not raw or raw.strip().lower() == "selesai":
-        return raw
-    m = re.search(r'(\d{1,2})[.:](\d{2})', raw)
-    if m:
-        return f"{m.group(1).zfill(2)}:{m.group(2)}"
-    return raw
+from .utils import normalize_waktu, sanitize_konteks
 
 SYSTEM_PROMPT = """
 Kamu adalah asisten administrasi pemerintah Indonesia.
@@ -66,17 +56,27 @@ PENTING — JUMLAH PELAKSANA:
 """
 
 
-def parse_surat_tugas(teks_pdf: str, api_key: str = "") -> LaporanPerdin:
+def parse_surat_tugas(teks_pdf: str, api_key: str = "", konteks_hasil: str | None = None) -> LaporanPerdin:
     if not api_key:
         api_key = GROQ_API_KEY
 
     client = groq.Groq(api_key=api_key)
 
+    konteks_hasil = sanitize_konteks(konteks_hasil)
+
+    user_content = f"Proses surat tugas berikut:\n\n{teks_pdf}"
+    if konteks_hasil:
+        user_content += (
+            f"\n\nKONTEKS HASIL PERJALANAN DARI USER:\n{konteks_hasil}\n"
+            "Gunakan konteks tersebut sebagai DASAR untuk membuat bagian 'hasil' (hasil_intro & list hasil). "
+            "Kembangkan menjadi kalimat paragraf yang lebih detail dan formal."
+        )
+
     resp = client.chat.completions.create(
         model="openai/gpt-oss-120b",
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"Proses surat tugas berikut:\n\n{teks_pdf}"},
+            {"role": "user", "content": user_content},
         ],
         response_format={"type": "json_object"},
         temperature=0.0,
@@ -103,8 +103,8 @@ def parse_surat_tugas(teks_pdf: str, api_key: str = "") -> LaporanPerdin:
         tanggal_st=data.get("tanggal_st", ""),
         maksud_tujuan=data.get("maksud_tujuan", ""),
         kegiatan_deskripsi=data.get("kegiatan_deskripsi", ""),
-        kegiatan_waktu_mulai=_normalize_waktu(data.get("kegiatan_waktu_mulai", "")),
-        kegiatan_waktu_selesai=_normalize_waktu(data.get("kegiatan_waktu_selesai", "selesai")),
+        kegiatan_waktu_mulai=normalize_waktu(data.get("kegiatan_waktu_mulai", "")),
+        kegiatan_waktu_selesai=normalize_waktu(data.get("kegiatan_waktu_selesai", "selesai")),
         kegiatan_tempat=data.get("kegiatan_tempat", ""),
         hasil_intro=data.get("hasil_intro", ""),
         hasil=data.get("hasil", []),

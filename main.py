@@ -11,17 +11,7 @@ from core.pdf_extractor import extract_text_from_pdf, is_pdf_readable
 from core.ai_parser import parse_surat_tugas
 from core.renderer import render_laporan
 from core.models import LaporanPerdin
-
-
-def _normalize_waktu(raw: str) -> str:
-    """Strip descriptive time words (pagi, sore, WIB, dll), keep only HH:MM."""
-    import re
-    if not raw or raw.strip().lower() == "selesai":
-        return raw
-    m = re.search(r'(\d{1,2})[.:](\d{2})', raw)
-    if m:
-        return f"{m.group(1).zfill(2)}:{m.group(2)}"
-    return raw
+from core.utils import normalize_waktu
 
 
 def _edit_manual(lap: LaporanPerdin) -> LaporanPerdin:
@@ -32,8 +22,8 @@ def _edit_manual(lap: LaporanPerdin) -> LaporanPerdin:
     lap.hari_tanggal = input(f"Hari, Tanggal [{lap.hari_tanggal}]: ") or lap.hari_tanggal
     lap.maksud_tujuan = input(f"Maksud & Tujuan [{lap.maksud_tujuan[:50]}...]: ") or lap.maksud_tujuan
     lap.kegiatan_deskripsi = input(f"Deskripsi Kegiatan [{lap.kegiatan_deskripsi[:50]}...]: ") or lap.kegiatan_deskripsi
-    lap.kegiatan_waktu_mulai = _normalize_waktu(input(f"Waktu Mulai [{lap.kegiatan_waktu_mulai}]: ") or lap.kegiatan_waktu_mulai)
-    lap.kegiatan_waktu_selesai = _normalize_waktu(input(f"Waktu Selesai [{lap.kegiatan_waktu_selesai}]: ") or lap.kegiatan_waktu_selesai)
+    lap.kegiatan_waktu_mulai = normalize_waktu(input(f"Waktu Mulai [{lap.kegiatan_waktu_mulai}]: ") or lap.kegiatan_waktu_mulai)
+    lap.kegiatan_waktu_selesai = normalize_waktu(input(f"Waktu Selesai [{lap.kegiatan_waktu_selesai}]: ") or lap.kegiatan_waktu_selesai)
     lap.kegiatan_tempat = input(f"Tempat [{lap.kegiatan_tempat}]: ") or lap.kegiatan_tempat
     lap.tempat_tanggal_ttd = input(f"Tempat, Tgl TTD [{lap.tempat_tanggal_ttd}]: ") or lap.tempat_tanggal_ttd
 
@@ -63,11 +53,15 @@ def _konfirmasi(lap: LaporanPerdin) -> LaporanPerdin:
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python main.py <path_surat_tugas.pdf>")
-        sys.exit(1)
+    import argparse
+    parser = argparse.ArgumentParser(description="Generator Laporan Perjalanan Dinas Otomatis")
+    parser.add_argument("pdf_path", help="Path ke file PDF surat tugas")
+    parser.add_argument("pos_konteks", nargs="?", default=None, help="Konteks/ringkasan hasil perjalanan (opsional)")
+    parser.add_argument("--konteks", type=str, default=None, help="Konteks/ringkasan hasil perjalanan (opsional)")
+    args = parser.parse_args()
 
-    pdf_path = sys.argv[1]
+    pdf_path = args.pdf_path
+    konteks_hasil = args.konteks or args.pos_konteks
 
     print(f"Membaca PDF: {pdf_path}")
     if not is_pdf_readable(pdf_path):
@@ -79,7 +73,7 @@ def main():
 
     print("Menganalisis surat tugas dengan AI...")
     try:
-        laporan = parse_surat_tugas(teks, GROQ_API_KEY)
+        laporan = parse_surat_tugas(teks, GROQ_API_KEY, konteks_hasil=konteks_hasil)
     except Exception as e:
         print(f"ERROR: Gagal parse surat tugas: {e}")
         sys.exit(1)

@@ -22,6 +22,8 @@ def main():
     parser.add_argument("pdf_path", help="Path ke file PDF surat tugas")
     parser.add_argument("--render", action="store_true",
                         help="Render hasil ke .docx")
+    parser.add_argument("--konteks", type=str, default=None,
+                        help="Konteks/ringkasan hasil perjalanan dinas (opsional)")
     args = parser.parse_args()
 
     pdf_path = Path(args.pdf_path)
@@ -44,7 +46,7 @@ def main():
 
     print("\n[AI] Memanggil agentic parser...")
     try:
-        laporan = parse_surat_tugas(teks, GROQ_API_KEY)
+        laporan = parse_surat_tugas(teks, GROQ_API_KEY, konteks_hasil=args.konteks)
     except Exception as e:
         print(f"\n[ERROR] Error: {e}")
         import traceback
