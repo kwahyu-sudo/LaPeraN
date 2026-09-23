@@ -15,6 +15,7 @@ if _env_file.exists():
             os.environ.setdefault(_k.strip(), _v.strip())
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "qwen/qwen3.6-27b")
 
 # Write template from base64 string to a temp file (bypasses HF git binary restrictions)
 from templates.template_data import TEMPLATE_B64

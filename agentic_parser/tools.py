@@ -107,8 +107,16 @@ TOOLS = [
 
 # ── Helpers ─────────────────────────────────────────────────────────
 
-def _get_model(tool_name: str) -> str:
-    """Ambil model untuk tool tertentu — fallback ke reasoning model."""
+def _get_model(tool_name: str, state: dict | None = None) -> str:
+    """Ambil model untuk tool tertentu — dari model_cfg di state, fallback ke default."""
+    cfg = (state or {}).get("_model_cfg")
+    if cfg:
+        mapping = {
+            "extract_header_fields": cfg.get("header"),
+            "extract_pelaksana": cfg.get("pelaksana"),
+            "generate_laporan_content": cfg.get("content"),
+        }
+        return mapping.get(tool_name) or cfg.get("reasoning", REASONING_MODEL)
     return MODEL_FOR_TOOL.get(tool_name, REASONING_MODEL)
 
 
@@ -131,8 +139,8 @@ def _call_llm(system: str, user: str, api_key: str,
 
 # ── Worker implementations ──────────────────────────────────────────
 
-def _extract_header(teks: str, api_key: str) -> dict:
-    model = _get_model("extract_header_fields")
+def _extract_header(teks: str, api_key: str, state: dict | None = None) -> dict:
+    model = _get_model("extract_header_fields", state)
     return _call_llm(
         system=(
             "Ekstrak field header surat tugas perjalanan dinas. "
@@ -150,8 +158,8 @@ def _extract_header(teks: str, api_key: str) -> dict:
     )
 
 
-def _extract_pelaksana(teks: str, api_key: str) -> list[dict]:
-    model = _get_model("extract_pelaksana")
+def _extract_pelaksana(teks: str, api_key: str, state: dict | None = None) -> list[dict]:
+    model = _get_model("extract_pelaksana", state)
     data = _call_llm(
         system=(
             "Ekstrak daftar pelaksana perjalanan dinas. "
@@ -174,7 +182,7 @@ def _extract_pelaksana(teks: str, api_key: str) -> list[dict]:
 
 
 def _generate_content(args: dict, api_key: str, state: dict | None = None) -> dict:
-    model = _get_model("generate_laporan_content")
+    model = _get_model("generate_laporan_content", state)
 
     # ponytail: baca pelaksana dari state (hasil extract_pelaksana) dulu,
     # fallback ke args kalau model ngirim via parameter
@@ -258,14 +266,14 @@ def handle_tool_call(tool_name: str, tool_args: dict,
 
     if tool_name == "extract_header_fields":
         teks = state.get("_teks", "")
-        result = _extract_header(teks, api_key)
+        result = _extract_header(teks, api_key, state)
         for k, v in result.items():
             if v:
                 state[k] = v
 
     elif tool_name == "extract_pelaksana":
         teks = state.get("_teks", "")
-        result = _extract_pelaksana(teks, api_key)
+        result = _extract_pelaksana(teks, api_key, state)
         if result:
             state["pelaksana"] = result
 

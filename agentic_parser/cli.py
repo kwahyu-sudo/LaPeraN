@@ -16,12 +16,16 @@ from config import GROQ_API_KEY, TEMPLATE_PATH
 from core.pdf_extractor import extract_text_from_pdf, is_pdf_readable
 from core.renderer import render_laporan
 from agentic_parser import parse_surat_tugas
+from agentic_parser.config import AVAILABLE_MODELS, DEFAULT_MODEL
 
 def main():
     parser = argparse.ArgumentParser(description="Test agentic parser")
     parser.add_argument("pdf_path", help="Path ke file PDF surat tugas")
     parser.add_argument("--render", action="store_true",
                         help="Render hasil ke .docx")
+    parser.add_argument("--model", default=DEFAULT_MODEL,
+                        choices=list(AVAILABLE_MODELS.keys()),
+                        help=f"Model AI (default: {DEFAULT_MODEL})")
     args = parser.parse_args()
 
     pdf_path = Path(args.pdf_path)
@@ -43,8 +47,9 @@ def main():
     teks = extract_text_from_pdf(str(pdf_path))
 
     print("\n[AI] Memanggil agentic parser...")
+    print(f"[AI] Model: {args.model}")
     try:
-        laporan = parse_surat_tugas(teks, GROQ_API_KEY)
+        laporan = parse_surat_tugas(teks, GROQ_API_KEY, model_key=args.model)
     except Exception as e:
         print(f"\n[ERROR] Error: {e}")
         import traceback

@@ -5,7 +5,7 @@ import re
 
 import groq
 
-from config import GROQ_API_KEY
+from config import GROQ_API_KEY, GROQ_MODEL
 from .models import LaporanPerdin, Pelaksana
 
 
@@ -73,7 +73,7 @@ def parse_surat_tugas(teks_pdf: str, api_key: str = "") -> LaporanPerdin:
     client = groq.Groq(api_key=api_key)
 
     resp = client.chat.completions.create(
-        model="openai/gpt-oss-120b",
+        model=GROQ_MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": f"Proses surat tugas berikut:\n\n{teks_pdf}"},

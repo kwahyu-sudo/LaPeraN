@@ -9,7 +9,7 @@ import groq
 
 from config import GROQ_API_KEY
 from core.models import LaporanPerdin
-from .config import REASONING_MODEL, MAX_ITERATIONS
+from .config import REASONING_MODEL, MAX_ITERATIONS, get_model_config
 from .tools import TOOLS, handle_tool_call, state_to_laporan, _validate
 
 # Field yang bisa diisi default — tidak perlu retry loop
@@ -35,13 +35,16 @@ Kamu hanya perlu memutuskan tool mana yang dipanggil dan dengan argumen apa.
 """
 
 
-def parse_surat_tugas(teks_pdf: str, api_key: str = "") -> LaporanPerdin:
+def parse_surat_tugas(teks_pdf: str, api_key: str = "", model_key: str | None = None) -> LaporanPerdin:
     """Agentic version: reasoning loop + tool calls. Signature sama dengan original."""
     if not api_key:
         api_key = GROQ_API_KEY
 
+    model_cfg = get_model_config(model_key)
+    reasoning_model = model_cfg["reasoning"]
+
     client = groq.Groq(api_key=api_key)
-    state: dict = {"_teks": teks_pdf}
+    state: dict = {"_teks": teks_pdf, "_model_cfg": model_cfg}
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -58,7 +61,7 @@ def parse_surat_tugas(teks_pdf: str, api_key: str = "") -> LaporanPerdin:
     stall_count = 0
 
     print(f"\n{'='*50}")
-    print(f"  [Agentic Loop] reasoning: {REASONING_MODEL}")
+    print(f"  [Agentic Loop] reasoning: {reasoning_model}")
     print(f"{'='*50}\n")
 
     while iterations < MAX_ITERATIONS:
@@ -67,7 +70,7 @@ def parse_surat_tugas(teks_pdf: str, api_key: str = "") -> LaporanPerdin:
 
         try:
             response = client.chat.completions.create(
-                model=REASONING_MODEL,
+                model=reasoning_model,
                 messages=messages,
                 tools=TOOLS,
                 tool_choice="auto",

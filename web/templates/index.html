@@ -56,6 +56,14 @@
         <p>Format: PDF TTE BSrE (bukan scan)</p>
       <input type="file" name="pdf" accept=".pdf" id="file-input">
       </div>
+      <div style="margin-top:1rem;">
+        <label style="display:block;font-size:.85rem;font-weight:500;color:#555;margin-bottom:.35rem;">Model AI</label>
+        <select name="model" style="width:100%;padding:.5rem .75rem;border:1px solid #ddd;border-radius:6px;font-size:.9rem;font-family:inherit;background:#fff;">
+          {% for key, info in models.items() %}
+          <option value="{{ key }}" {% if key == default_model %}selected{% endif %}>{{ info.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
       <div class="actions">
         <button type="submit" class="btn btn-primary" id="parse-btn">Parse dengan AI</button>
       </div>

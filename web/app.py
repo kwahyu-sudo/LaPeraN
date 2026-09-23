@@ -13,6 +13,7 @@ from flask import Flask, render_template, request, send_file, redirect, url_for,
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import GROQ_API_KEY, TEMPLATE_PATH
+from agentic_parser.config import AVAILABLE_MODELS, DEFAULT_MODEL
 from core.pdf_extractor import extract_text_from_pdf, is_pdf_readable
 # from core.ai_parser import parse_surat_tugas      # old (single-shot)
 from agentic_parser import parse_surat_tugas          # new (agentic loop)
@@ -81,7 +82,8 @@ def _dict_to_lap(d: dict) -> LaporanPerdin:
 @app.route("/", methods=["GET"])
 def index():
     error = request.args.get("error", "")
-    return render_template("index.html", step="upload", error=error)
+    return render_template("index.html", step="upload", error=error,
+                           models=AVAILABLE_MODELS, default_model=DEFAULT_MODEL)
 
 
 @app.route("/parse", methods=["POST"])
@@ -101,8 +103,9 @@ def parse():
         return redirect(url_for("index", error="PDF tidak punya layer teks (scan). Upload TTE digital asli."))
 
     teks = extract_text_from_pdf(str(pdf_path))
+    model_key = request.form.get("model", DEFAULT_MODEL)
     try:
-        laporan = parse_surat_tugas(teks, GROQ_API_KEY)
+        laporan = parse_surat_tugas(teks, GROQ_API_KEY, model_key=model_key)
     except Exception as e:
         pdf_path.unlink(missing_ok=True)
         return redirect(url_for("index", error=f"Gagal parse: {e}"))
