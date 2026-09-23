@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 
 from flask import Flask, render_template, request, send_file, redirect, url_for, make_response
+from werkzeug.utils import secure_filename
 
 # Ensure core/ is importable
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -19,16 +20,8 @@ from core.pdf_extractor import extract_text_from_pdf, is_pdf_readable
 from agentic_parser import parse_surat_tugas          # new (agentic loop)
 from core.renderer import render_laporan
 from core.models import LaporanPerdin, Pelaksana
+from core.utils import normalize_waktu, sanitize_konteks
 
-
-def _normalize_waktu(raw: str) -> str:
-    """Strip descriptive time words (pagi, sore, WIB, dll), keep only HH:MM."""
-    if not raw or raw.strip().lower() == "selesai":
-        return raw
-    m = re.search(r'(\d{1,2})[.:](\d{2})', raw)
-    if m:
-        return f"{m.group(1).zfill(2)}:{m.group(2)}"
-    return raw
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24).hex()
@@ -95,7 +88,8 @@ def parse():
     if not file.filename.lower().endswith(".pdf"):
         return redirect(url_for("index", error="File harus PDF"))
 
-    pdf_path = UPLOAD_DIR / file.filename
+    safe_name = secure_filename(file.filename) or "uploaded.pdf"
+    pdf_path = UPLOAD_DIR / safe_name
     file.save(pdf_path)
 
     if not is_pdf_readable(str(pdf_path)):
@@ -104,11 +98,12 @@ def parse():
 
     teks = extract_text_from_pdf(str(pdf_path))
     model_key = request.form.get("model", DEFAULT_MODEL)
+    konteks_hasil = sanitize_konteks(request.form.get("konteks_hasil"))
     try:
-        laporan = parse_surat_tugas(teks, GROQ_API_KEY, model_key=model_key)
+        laporan = parse_surat_tugas(teks, GROQ_API_KEY, model_key=model_key, konteks_hasil=konteks_hasil)
     except Exception as e:
         pdf_path.unlink(missing_ok=True)
-        return redirect(url_for("index", error=f"Gagal parse: {e}"))
+        return redirect(url_for("index", error="Gagal parse surat tugas. Coba lagi atau unggah PDF lain."))
 
     pdf_path.unlink(missing_ok=True)  # no longer needed after parsing
 
@@ -139,7 +134,7 @@ def render():
         if key in request.form:
             val = request.form[key]
             if key in ("kegiatan_waktu_mulai", "kegiatan_waktu_selesai"):
-                val = _normalize_waktu(val)
+                val = normalize_waktu(val)
             data[key] = val
 
     # Pelaksana

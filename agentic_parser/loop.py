@@ -9,6 +9,7 @@ import groq
 
 from config import GROQ_API_KEY
 from core.models import LaporanPerdin
+from core.utils import sanitize_konteks
 from .config import REASONING_MODEL, MAX_ITERATIONS, get_model_config
 from .tools import TOOLS, handle_tool_call, state_to_laporan, _validate
 
@@ -35,7 +36,7 @@ Kamu hanya perlu memutuskan tool mana yang dipanggil dan dengan argumen apa.
 """
 
 
-def parse_surat_tugas(teks_pdf: str, api_key: str = "", model_key: str | None = None) -> LaporanPerdin:
+def parse_surat_tugas(teks_pdf: str, api_key: str = "", model_key: str | None = None, konteks_hasil: str | None = None) -> LaporanPerdin:
     """Agentic version: reasoning loop + tool calls. Signature sama dengan original."""
     if not api_key:
         api_key = GROQ_API_KEY
@@ -45,15 +46,22 @@ def parse_surat_tugas(teks_pdf: str, api_key: str = "", model_key: str | None = 
 
     client = groq.Groq(api_key=api_key)
     state: dict = {"_teks": teks_pdf, "_model_cfg": model_cfg}
+    konteks_hasil = sanitize_konteks(konteks_hasil)
+    if konteks_hasil:
+        state["_konteks_hasil"] = konteks_hasil
+
+    user_prompt = (
+        "Buat laporan perjalanan dinas dari surat tugas berikut. "
+        "Teks PDF sudah tersimpan di state — kamu tidak perlu mengirimnya "
+        "saat memanggil tool extract_header_fields atau extract_pelaksana."
+    )
+    if konteks_hasil:
+        user_prompt += f"\n\nKonteks Hasil Perjalanan dari User: {konteks_hasil}"
+    user_prompt += f"\n\n{teks_pdf[:2000]}"
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": (
-            f"Buat laporan perjalanan dinas dari surat tugas berikut. "
-            f"Teks PDF sudah tersimpan di state — kamu tidak perlu mengirimnya "
-            f"saat memanggil tool extract_header_fields atau extract_pelaksana.\n\n"
-            f"{teks_pdf[:2000]}"
-        )},
+        {"role": "user", "content": user_prompt},
     ]
 
     iterations = 0
@@ -158,7 +166,7 @@ def parse_surat_tugas(teks_pdf: str, api_key: str = "", model_key: str | None = 
     # Fallback kalau state kosong
     if not state.get("kepada"):
         print("  [WARN] State kosong - fallback ke single-shot parser")
-        return _fallback_single_shot(teks_pdf, api_key)
+        return _fallback_single_shot(teks_pdf, api_key, konteks_hasil=konteks_hasil)
 
     laporan = state_to_laporan(state)
 
@@ -171,8 +179,8 @@ def parse_surat_tugas(teks_pdf: str, api_key: str = "", model_key: str | None = 
     return laporan
 
 
-def _fallback_single_shot(teks_pdf: str, api_key: str) -> LaporanPerdin:
+def _fallback_single_shot(teks_pdf: str, api_key: str, konteks_hasil: str | None = None) -> LaporanPerdin:
     """Fallback ke single-shot parser asli kalau agentic loop gagal."""
     import importlib
     parser = importlib.import_module("core.ai_parser")
-    return parser.parse_surat_tugas(teks_pdf, api_key)
+    return parser.parse_surat_tugas(teks_pdf, api_key, konteks_hasil=konteks_hasil)

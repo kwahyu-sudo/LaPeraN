@@ -4,22 +4,13 @@ Worker panggil model sesuai config.py — tiap tool bisa punya model sendiri.
 """
 
 import json
-import re
 import groq
 
 from config import GROQ_API_KEY
 from core.models import LaporanPerdin, Pelaksana
+from core.utils import normalize_waktu
 from .config import MODEL_FOR_TOOL, REASONING_MODEL
 
-
-def _normalize_waktu(raw: str) -> str:
-    """Strip descriptive time words (pagi, sore, WIB, dll), keep only HH:MM."""
-    if not raw or raw.strip().lower() == "selesai":
-        return raw
-    m = re.search(r'(\d{1,2})[.:](\d{2})', raw)
-    if m:
-        return f"{m.group(1).zfill(2)}:{m.group(2)}"
-    return raw
 
 # ── Tool schemas (dikirim ke reasoning LLM) ─────────────────────────
 
@@ -202,6 +193,24 @@ def _generate_content(args: dict, api_key: str, state: dict | None = None) -> di
             pelaksana = []
     pelaksana_str = json.dumps(pelaksana, ensure_ascii=False, indent=2)
 
+    # Ambil konteks_hasil dari state atau args
+    raw_konteks = (state or {}).get("_konteks_hasil", "") or args.get("konteks_hasil", "")
+    konteks_hasil = raw_konteks.strip() if (isinstance(raw_konteks, str) and raw_konteks.strip()) else ""
+
+    user_content = (
+        f"Kepada: {args.get('kepada', '')}\n"
+        f"Pelaksana:\n{pelaksana_str}\n"
+        f"Hari/Tanggal: {args.get('hari_tanggal', '')}\n"
+        f"Nomor ST: {args.get('nomor_st', '')}\n"
+        f"Tujuan Kegiatan: {args.get('tujuan_kegiatan', '')}"
+    )
+    if konteks_hasil:
+        user_content += (
+            f"\n\nKONTEKS HASIL PERJALANAN DARI USER:\n{konteks_hasil}\n"
+            "Gunakan konteks tersebut sebagai DASAR untuk membuat bagian 'hasil' (hasil_intro & list hasil). "
+            "Kembangkan menjadi kalimat paragraf yang lebih detail dan formal."
+        )
+
     return _call_llm(
         system=(
             "Kamu adalah penulis laporan perjalanan dinas pemerintah Indonesia. "
@@ -218,13 +227,7 @@ def _generate_content(args: dict, api_key: str, state: dict | None = None) -> di
             "PENTING — kegiatan_waktu_mulai dan kegiatan_waktu_selesai adalah JAM, bukan tanggal. "
             "Gunakan format 'HH.MM WIB', jangan pakai format tanggal."
         ),
-        user=(
-            f"Kepada: {args.get('kepada', '')}\n"
-            f"Pelaksana:\n{pelaksana_str}\n"
-            f"Hari/Tanggal: {args.get('hari_tanggal', '')}\n"
-            f"Nomor ST: {args.get('nomor_st', '')}\n"
-            f"Tujuan Kegiatan: {args.get('tujuan_kegiatan', '')}"
-        ),
+        user=user_content,
         api_key=api_key,
         model=model,
         temp=0.3,
@@ -287,9 +290,9 @@ def handle_tool_call(tool_name: str, tool_args: dict,
                 state[f] = result[f]
         # ponytail: normalize waktu (strip "pagi/sore/WIB" noise)
         if "kegiatan_waktu_mulai" in state:
-            state["kegiatan_waktu_mulai"] = _normalize_waktu(state["kegiatan_waktu_mulai"])
+            state["kegiatan_waktu_mulai"] = normalize_waktu(state["kegiatan_waktu_mulai"])
         if "kegiatan_waktu_selesai" in state:
-            state["kegiatan_waktu_selesai"] = _normalize_waktu(state["kegiatan_waktu_selesai"])
+            state["kegiatan_waktu_selesai"] = normalize_waktu(state["kegiatan_waktu_selesai"])
         # ponytail: nama_ttd harus match persis dari pelaksana (case-sensitive)
         pelaksana = state.get("pelaksana", [])
         if pelaksana:
