@@ -3,6 +3,7 @@ from docx.oxml.ns import qn
 from copy import deepcopy
 
 from .models import LaporanPerdin
+from .utils import normalize_waktu
 
 _WML_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
 
@@ -252,17 +253,6 @@ def _rebuild_ttd(doc, pelaksana: list, nama_ttd: list):
                     pPr.remove(numPr)
 
 
-def _normalize_waktu(raw: str) -> str:
-    """Strip descriptive time words (pagi, sore, WIB, dll), keep only HH:MM."""
-    import re
-    if not raw or raw.strip().lower() == "selesai":
-        return raw
-    m = re.search(r'(\d{1,2})[.:](\d{2})', raw)
-    if m:
-        return f"{m.group(1).zfill(2)}:{m.group(2)}"
-    return raw
-
-
 def render_laporan(laporan: LaporanPerdin, template_path: str, output_path: str):
     doc = Document(template_path)
 
@@ -277,8 +267,8 @@ def render_laporan(laporan: LaporanPerdin, template_path: str, output_path: str)
         p0.paragraph_format.first_line_indent = 0
 
     # ── Step 1: normalise waktu ──
-    mulai = _normalize_waktu(laporan.kegiatan_waktu_mulai)
-    selesai = _normalize_waktu(laporan.kegiatan_waktu_selesai)
+    mulai = normalize_waktu(laporan.kegiatan_waktu_mulai)
+    selesai = normalize_waktu(laporan.kegiatan_waktu_selesai)
 
     # ── Step 2: combine waktu ──
     waktu = (
