@@ -26,6 +26,8 @@ def main():
     parser.add_argument("--model", default=DEFAULT_MODEL,
                         choices=list(AVAILABLE_MODELS.keys()),
                         help=f"Model AI (default: {DEFAULT_MODEL})")
+    parser.add_argument("--konteks", type=str, default=None,
+                        help="Konteks/ringkasan hasil perjalanan dinas (opsional)")
     args = parser.parse_args()
 
     pdf_path = Path(args.pdf_path)
@@ -49,7 +51,7 @@ def main():
     print("\n[AI] Memanggil agentic parser...")
     print(f"[AI] Model: {args.model}")
     try:
-        laporan = parse_surat_tugas(teks, GROQ_API_KEY, model_key=args.model)
+        laporan = parse_surat_tugas(teks, GROQ_API_KEY, model_key=args.model, konteks_hasil=args.konteks)
     except Exception as e:
         print(f"\n[ERROR] Error: {e}")
         import traceback
