@@ -45,6 +45,7 @@
   {% if error %}
   <div class="error">{{ error }}</div>
   {% endif %}
+  <div class="error" id="client-error" style="display:none"></div>
 
   {% if step == "upload" %}
   <div class="card">
@@ -53,7 +54,7 @@
       <div class="drop-zone" id="drop-zone">
         <div style="font-size:2.5rem;color:#4a6cf7;">📎</div>
         <p style="font-weight:500;margin-top:.5rem;">Klik atau drop PDF di sini</p>
-        <p>Format: PDF TTE BSrE (bukan scan)</p>
+        <p>Format: PDF TTE BSrE (bukan scan) · Maks. 4 MB</p>
       <input type="file" name="pdf" accept=".pdf" id="file-input">
       </div>
       <div style="margin-top:1rem;">
@@ -228,10 +229,42 @@
     list.appendChild(div); hasilCount++;
   }
 
-  // Upload form — spinner biasa
-  document.getElementById('upload-form')?.addEventListener('submit', () => {
+  // Batas upload Vercel: serverless function menolak body > ~4,5 MB (413
+  // FUNCTION_PAYLOAD_TOO_LARGE) sebelum request sampai ke Flask — padahal
+  // Flask mengizinkan 16 MB. Cegah di browser dengan pesan yang jelas.
+  const MAX_PDF_BYTES = 4 * 1024 * 1024; // 4 MB (margin aman di bawah 4,5 MB)
+  function showClientError(msg) {
+    const box = document.getElementById('client-error');
+    if (!box) return;
+    box.textContent = msg;
+    box.style.display = 'block';
+    box.scrollIntoView({ block: 'nearest' });
+  }
+  function clearClientError() {
+    const box = document.getElementById('client-error');
+    if (box) { box.style.display = 'none'; box.textContent = ''; }
+  }
+  function pdfTooBig() {
+    const f = document.getElementById('file-input')?.files?.[0];
+    return f && f.size > MAX_PDF_BYTES ? f : null;
+  }
+  // Upload form — spinner biasa + validasi ukuran
+  document.getElementById('upload-form')?.addEventListener('submit', (e) => {
+    clearClientError();
+    const big = pdfTooBig();
+    if (big) {
+      e.preventDefault();
+      showClientError('Ukuran PDF ' + (big.size / 1048576).toFixed(1).replace('.', ',') + ' MB melebihi batas 4 MB. Kecilkan/kompres PDF-nya lalu upload ulang.');
+      return;
+    }
     const btn = document.getElementById('parse-btn');
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Memproses...'; }
+  });
+  // Peringatan dini saat file dipilih / di-drop
+  document.getElementById('file-input')?.addEventListener('change', () => {
+    clearClientError();
+    const big = pdfTooBig();
+    if (big) showClientError('File ' + (big.size / 1048576).toFixed(1).replace('.', ',') + ' MB — melebihi batas 4 MB. Pilih PDF yang lebih kecil.');
   });
 
   // Confirm form — native submit biar browser langsung streaming file
